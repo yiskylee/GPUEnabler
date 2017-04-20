@@ -33,6 +33,8 @@ fi
 
 EXAMPLE_MASTER=${MASTER:-"local[*]"}
 
+echo $EXAMPLE_MASTER
+
 if [[ ! $EXAMPLE_CLASS == com.ibm.gpuenabler* ]]; then
   EXAMPLE_CLASS="com.ibm.gpuenabler.$EXAMPLE_CLASS"
 fi

@@ -33,17 +33,19 @@ import scala.reflect.ClassTag
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
+import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
+
 
 /**
   * An abstract class to represent a ''User Defined function'' from a Native GPU program.
   */
 abstract class ExternalFunction extends Serializable {
- def compute[U : ClassTag, T : ClassTag](inp: HybridIterator[T],
-                                         columnSchemas: Seq[ColumnPartitionSchema],
-                                         outputSize: Option[Int] = None,
-                                         outputArraySizes: Seq[Int] = null,
-                                         inputFreeVariables: Seq[Any] = null,
-                                         blockId : Option[BlockId] = None) : Iterator[U]
+  def compute[U: ClassTag, T: ClassTag](inp: HybridIterator[T],
+                                        columnSchemas: Seq[ColumnPartitionSchema],
+                                        outputSize: Option[Int] = None,
+                                        outputArraySizes: Seq[Int] = null,
+                                        inputFreeVariables: Seq[Any] = null,
+                                        blockId: Option[BlockId] = None): Iterator[U]
 
   def inputColumnsOrder(): Seq[String]
 
@@ -51,13 +53,13 @@ abstract class ExternalFunction extends Serializable {
 }
 
 /**
-  *   * A class to represent a ''User Defined function'' from a Native GPU program.
-  *   * Wrapper Java function for CUDAFunction scala function
+  * * A class to represent a ''User Defined function'' from a Native GPU program.
+  * * Wrapper Java function for CUDAFunction scala function
   *
   * Specify the `funcName`, `_inputColumnsOrder`, `_outputColumnsOrder`,
   * and `resourceURL` when creating a new `CUDAFunction`,
   * then pass this object as an input argument to `mapExtFunc` or
-  *  `reduceExtFunc` as follows,
+  * `reduceExtFunc` as follows,
   *
   * {{{
   *
@@ -70,7 +72,7 @@ abstract class ExternalFunction extends Serializable {
   *   JavaRDD<Integer> inputData = sc.parallelize(range).cache();
   *   ClassTag<Integer> tag = scala.reflect.ClassTag$.MODULE$.apply(Integer.TYPE);
   *   JavaCUDARDD<Integer> ci = new JavaCUDARDD(inputData.rdd(), tag);
-  *   
+  *
   *   JavaCUDARDD<Integer> output = ci.mapExtFunc((new Function<Integer, Integer>() {
   *          public Integer call(Integer x) {
   *              return (2 * x);
@@ -80,23 +82,23 @@ abstract class ExternalFunction extends Serializable {
   * }}}
   *
   * @constructor The "compute" method is initialized so that when invoked it will
-  *             load and launch the GPU kernel with the required set of parameters
-  *             based on the input & output column order.
-  * @param funcName Name of the Native code's function
-  * @param _inputColumnsOrder List of input columns name mapping to corresponding
-  *                           class members of the input RDD.
+  *              load and launch the GPU kernel with the required set of parameters
+  *              based on the input & output column order.
+  * @param funcName            Name of the Native code's function
+  * @param _inputColumnsOrder  List of input columns name mapping to corresponding
+  *                            class members of the input RDD.
   * @param _outputColumnsOrder List of output columns name mapping to corresponding
   *                            class members of the result RDD.
-  * @param resourceURL  Points to the resource URL where the GPU kernel is present
-  * @param constArgs  Sequence of constant argument that need to passed in to a
-  *                   GPU Kernel
-  * @param stagesCount  Provide a function which is used to determine the number
-  *                     of stages required to run this GPU kernel in spark based on the
-  *                     number of partition items to process. Default function return "1".
-  * @param dimensions Provide a function which is used to determine the GPU compute
-  *                   dimensions for each stage. Default function will determined the
-  *                   dimensions based on the number of partition items but for a single
-  *                   stage.
+  * @param resourceURL         Points to the resource URL where the GPU kernel is present
+  * @param constArgs           Sequence of constant argument that need to passed in to a
+  *                            GPU Kernel
+  * @param stagesCount         Provide a function which is used to determine the number
+  *                            of stages required to run this GPU kernel in spark based on the
+  *                            number of partition items to process. Default function return "1".
+  * @param dimensions          Provide a function which is used to determine the GPU compute
+  *                            dimensions for each stage. Default function will determined the
+  *                            dimensions based on the number of partition items but for a single
+  *                            stage.
   */
 class JavaCUDAFunction(val funcName: String,
                        val _inputColumnsOrder: java.util.List[String] = null,
@@ -104,40 +106,40 @@ class JavaCUDAFunction(val funcName: String,
                        val resourceURL: URL,
                        val constArgs: Seq[AnyVal] = Seq(),
                        val stagesCount: Option[JFunction[Long, Integer]] = null,
-                       val dimensions: Option[JFunction2[Long, Integer, Tuple2[Integer,Integer]]] = null) 
-    extends Serializable {
+                       val dimensions: Option[JFunction2[Long, Integer, Tuple2[Integer, Integer]]] = null)
+  extends Serializable {
 
-  implicit def toScalaTuples(x: Tuple2[Integer,Integer]) : Tuple2[Int,Int] = (x._1, x._2)
+  implicit def toScalaTuples(x: Tuple2[Integer, Integer]): Tuple2[Int, Int] = (x._1, x._2)
 
   implicit def toScalaFunction(fun: JFunction[Long, Integer]):
-    Option[Long => Int] = if (fun != null)
-      Some(x => fun.call(x))
-    else None
+  Option[Long => Int] = if (fun != null)
+    Some(x => fun.call(x))
+  else None
 
   implicit def toScalaFunction(fun: JFunction2[Long, Integer, Tuple2[Integer, Integer]]):
-    Option[(Long, Int) => Tuple2[Int, Int]] =  if (fun != null)
-      Some((x, y) => fun.call(x, y))
-    else None
+  Option[(Long, Int) => Tuple2[Int, Int]] = if (fun != null)
+    Some((x, y) => fun.call(x, y))
+  else None
 
-  val stagesCountFn: Option[Long => Int]  = stagesCount match {
+  val stagesCountFn: Option[Long => Int] = stagesCount match {
     case Some(fun: JFunction[Long, Integer]) => fun
     case _ => None
   }
 
   val dimensionsFn: Option[(Long, Int) => Tuple2[Int, Int]] = dimensions match {
-    case Some(fun: JFunction2[Long, Integer, Tuple2[Integer, Integer]] ) => fun
+    case Some(fun: JFunction2[Long, Integer, Tuple2[Integer, Integer]]) => fun
     case _ => None
   }
 
   val cf = new CUDAFunction(funcName, _inputColumnsOrder.asScala, _outputColumnsOrder.asScala,
     resourceURL, constArgs, stagesCountFn, dimensionsFn)
-  
+
   /* 
    * 3 variants - call invocations
    */
   def this(funcName: String, _inputColumnsOrder: java.util.List[String],
-          _outputColumnsOrder: java.util.List[String],
-          resourceURL: URL) =
+           _outputColumnsOrder: java.util.List[String],
+           resourceURL: URL) =
     this(funcName, _inputColumnsOrder, _outputColumnsOrder,
       resourceURL, Seq(), None, None)
 
@@ -145,14 +147,14 @@ class JavaCUDAFunction(val funcName: String,
            _outputColumnsOrder: java.util.List[String],
            resourceURL: URL, constArgs: Seq[AnyVal]) =
     this(funcName, _inputColumnsOrder, _outputColumnsOrder,
-    resourceURL, constArgs, None, None)
+      resourceURL, constArgs, None, None)
 
   def this(funcName: String, _inputColumnsOrder: java.util.List[String],
            _outputColumnsOrder: java.util.List[String],
            resourceURL: URL, constArgs: Seq[AnyVal],
-            stagesCount: Option[JFunction[Long, Integer]]) =
+           stagesCount: Option[JFunction[Long, Integer]]) =
     this(funcName, _inputColumnsOrder, _outputColumnsOrder,
-    resourceURL, Seq(), stagesCount, None)
+      resourceURL, Seq(), stagesCount, None)
 }
 
 
@@ -162,7 +164,7 @@ class JavaCUDAFunction(val funcName: String,
   * Specify the `funcName`, `_inputColumnsOrder`, `_outputColumnsOrder`,
   * and `resourceURL` when creating a new `CUDAFunction`,
   * then pass this object as an input argument to `mapExtFunc` or
-  *  `reduceExtFunc` as follows,
+  * `reduceExtFunc` as follows,
   *
   * {{{
   *     val mapFunction = new CUDAFunction(
@@ -177,23 +179,23 @@ class JavaCUDAFunction(val funcName: String,
   * }}}
   *
   * @constructor The "compute" method is initialized so that when invoked it will
-  *             load and launch the GPU kernel with the required set of parameters
-  *             based on the input & output column order.
-  * @param funcName Name of the Native code's function
-  * @param _inputColumnsOrder List of input columns name mapping to corresponding
-  *                           class members of the input RDD.
+  *              load and launch the GPU kernel with the required set of parameters
+  *              based on the input & output column order.
+  * @param funcName            Name of the Native code's function
+  * @param _inputColumnsOrder  List of input columns name mapping to corresponding
+  *                            class members of the input RDD.
   * @param _outputColumnsOrder List of output columns name mapping to corresponding
   *                            class members of the result RDD.
-  * @param resourceURL  Points to the resource URL where the GPU kernel is present
-  * @param constArgs  Sequence of constant argument that need to passed in to a
-  *                   GPU Kernel
-  * @param stagesCount  Provide a function which is used to determine the number
-  *                     of stages required to run this GPU kernel in spark based on the
-  *                     number of partition items to process. Default function return "1".
-  * @param dimensions Provide a function which is used to determine the GPU compute
-  *                   dimensions for each stage. Default function will determined the
-  *                   dimensions based on the number of partition items but for a single
-  *                   stage.
+  * @param resourceURL         Points to the resource URL where the GPU kernel is present
+  * @param constArgs           Sequence of constant argument that need to passed in to a
+  *                            GPU Kernel
+  * @param stagesCount         Provide a function which is used to determine the number
+  *                            of stages required to run this GPU kernel in spark based on the
+  *                            number of partition items to process. Default function return "1".
+  * @param dimensions          Provide a function which is used to determine the GPU compute
+  *                            dimensions for each stage. Default function will determined the
+  *                            dimensions based on the number of partition items but for a single
+  *                            stage.
   */
 class CUDAFunction(
                     val funcName: String,
@@ -203,14 +205,15 @@ class CUDAFunction(
                     val constArgs: Seq[AnyVal] = Seq(),
                     val stagesCount: Option[Long => Int] = None,
                     val dimensions: Option[(Long, Int) => (Int, Int)] = None
-                   )
+                  )
   extends ExternalFunction {
   implicit def toScalaFunction(fun: JFunction[Long, Int]): Long => Int = x => fun.call(x)
 
-  implicit def toScalaFunction(fun: JFunction2[Long, Int, Tuple2[Int,Int]]): (Long, Int) => 
-    Tuple2[Int,Int] = (x, y) => fun.call(x, y)
+  implicit def toScalaFunction(fun: JFunction2[Long, Int, Tuple2[Int, Int]]): (Long, Int) =>
+    Tuple2[Int, Int] = (x, y) => fun.call(x, y)
 
   def inputColumnsOrder: Seq[String] = _inputColumnsOrder
+
   def outputColumnsOrder: Seq[String] = _outputColumnsOrder
 
   var _blockId: Option[BlockId] = Some(RDDBlockId(0, 0))
@@ -241,16 +244,26 @@ class CUDAFunction(
       case None => GPUSparkEnv.get.cudaManager.computeDimensions(numElements)
     }
 
+    //    // XILI
+    //    val sw = new StringWriter
+    //    new Exception("stacktrace").printStackTrace(new PrintWriter(sw))
+    //    println(sw.toString)
+    //    // XILI
+
     cuLaunchKernel(function,
-      gpuGridSize, 1, 1,  // how many blocks
+      gpuGridSize, 1, 1, // how many blocks
       gpuBlockSize, 1, 1, // threads per block (eg. 1024)
       0, cuStream, // Shared memory size and stream
       kernelParameters, null // Kernel- and extra parameters
     )
+
+    //XILI
+    println("Kernel Launched")
+    //XILI
   }
 
   def createkernelParameterDesc2(a: Any, cuStream: CUstream):
-        Tuple5[_, _, CUdeviceptr, Pointer, _] = {
+  Tuple5[_, _, CUdeviceptr, Pointer, _] = {
     val (arr, hptr, devPtr, gptr, sz) = a match {
       case h if h.isInstanceOf[Int] => {
         val arr = Array.fill(1)(a.asInstanceOf[Int])
@@ -307,20 +320,20 @@ class CUDAFunction(
   }
 
   /**
-    *  This function is invoked from RDD `compute` function and it load & launches
-    *  the GPU kernel and performs the computation on GPU and returns the results
-    *  in an iterator.
+    * This function is invoked from RDD `compute` function and it load & launches
+    * the GPU kernel and performs the computation on GPU and returns the results
+    * in an iterator.
     *
-    * @param inputHyIter Provide the HybridIterator instance
-    * @param columnSchemas Provide the input and output column schema
-    * @param outputSize Specify the number of expected result. Default is equal to
-    *                   the number of element in that partition/
-    * @param outputArraySizes If the expected result is an array folded in a linear
-    *                         form, specific a sequence of the array length for every
-    *                         output columns
+    * @param inputHyIter        Provide the HybridIterator instance
+    * @param columnSchemas      Provide the input and output column schema
+    * @param outputSize         Specify the number of expected result. Default is equal to
+    *                           the number of element in that partition/
+    * @param outputArraySizes   If the expected result is an array folded in a linear
+    *                           form, specific a sequence of the array length for every
+    *                           output columns
     * @param inputFreeVariables Specify a list of free variable that need to be
     *                           passed in to the GPU kernel function, if any
-    * @param blockId  Specify the block ID associated with this operation
+    * @param blockId            Specify the block ID associated with this operation
     * @tparam U Output Iterator's type
     * @tparam T Input Iterator's type
     * @return Returns an iterator of type U
@@ -372,7 +385,7 @@ class CUDAFunction(
     }
 
     // add outputArraySizes to the list of arguments
-    if (outputArraySizes != null ) {
+    if (outputArraySizes != null) {
       val outputArraySizes_kpd = createkernelParameterDesc2(outputArraySizes.toArray, cuStream)
       kp = kp ++ Seq(outputArraySizes_kpd._4) // gpuPtr
       listDevPtr = listDevPtr ++ List(outputArraySizes_kpd._3) // CUdeviceptr

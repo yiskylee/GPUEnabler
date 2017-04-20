@@ -61,6 +61,7 @@ object SparkGPULR {
 
     showWarning()
 
+    println("args.length: " + args.length)
     val masterURL = if (args.length > 0) args(0) else "local[*]"
     val sparkConf = new SparkConf().setAppName("SparkGPULR").setMaster(masterURL)
     val sc = new SparkContext(sparkConf)
