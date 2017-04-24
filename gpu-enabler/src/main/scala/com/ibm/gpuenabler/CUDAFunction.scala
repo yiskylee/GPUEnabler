@@ -22,7 +22,7 @@ import java.net.URL
 
 import jcuda.Pointer
 import jcuda.driver.JCudaDriver._
-import jcuda.driver.{CUdeviceptr, CUfunction, CUstream, JCudaDriver}
+import jcuda.driver._
 import jcuda.runtime.{JCuda, cudaEvent_t, cudaStream_t}
 import org.apache.commons.io.IOUtils
 import org.apache.spark._
@@ -410,24 +410,26 @@ class CUDAFunction(
         val kernelParameters = Pointer.to(kp: _*)
         // Start the GPU execution with the populated kernel parameters
         // XILI
-        var start = new cudaEvent_t
-        var stop = new cudaEvent_t
-        JCuda.cudaEventCreate(start)
-        JCuda.cudaEventCreate(stop)
+        val start = new CUevent
+        val stop = new CUevent
+
+        JCudaDriver.cuEventCreate(start, 0)
+        JCudaDriver.cuEventCreate(stop, 0)
+
         var elapsedTime: Array[Float] = new Array[Float](1)
-        JCuda.cudaEventRecord(start, null)
+        JCudaDriver.cuEventRecord(start, cuStream)
         kernelStartTime = System.nanoTime()
         // XILI
         println("numElements: " + inputHyIter.numElements)
         launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream)
-        JCuda.cudaEventRecord(stop, null)
+        JCudaDriver.cuEventRecord(stop, cuStream)
         JCuda.cudaDeviceSynchronize()
 
-        JCuda.cudaEventElapsedTime(elapsedTime, start, stop)
+        JCudaDriver.cuEventElapsedTime(elapsedTime, start, stop)
         var kernelEventTime = elapsedTime(0) / 1e9
         println(f"kernel using event took $kernelEventTime%.3f seconds.")
-        JCuda.cudaEventDestroy(start)
-        JCuda.cudaEventDestroy(stop)
+        JCudaDriver.cuEventDestroy(start)
+        JCudaDriver.cuEventDestroy(stop)
 
       // launch kernel multiple times (multiple stages), suitable for reduce
       case Some(totalStagesFun) =>
