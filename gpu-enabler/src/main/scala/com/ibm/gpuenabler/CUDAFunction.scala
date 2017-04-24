@@ -426,8 +426,8 @@ class CUDAFunction(
         JCuda.cudaDeviceSynchronize()
 
         JCudaDriver.cuEventElapsedTime(elapsedTime, start, stop)
-        var kernelEventTime = elapsedTime(0) / 1e9
-        println(f"kernel using event took $kernelEventTime%.3f seconds.")
+        var kernelEventTime = elapsedTime(0)
+        println(f"kernel using event took $kernelEventTime%.3f milliseconds.")
         JCudaDriver.cuEventDestroy(start)
         JCudaDriver.cuEventDestroy(stop)
 
