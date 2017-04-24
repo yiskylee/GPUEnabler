@@ -256,10 +256,6 @@ class CUDAFunction(
       0, cuStream, // Shared memory size and stream
       kernelParameters, null // Kernel- and extra parameters
     )
-
-    //XILI
-    println("Kernel Launched")
-    //XILI
   }
 
   def createkernelParameterDesc2(a: Any, cuStream: CUstream):
@@ -400,13 +396,21 @@ class CUDAFunction(
       listDevPtr = listDevPtr ++ inputConstPtrs.map(_._3) // CUdeviceptr
     }
 
+    // XILI
+    var kernelStartTime = 0L
+    // XILI
+
     stagesCount match {
       // normal launch, no stages, suitable for map
 
       case None =>
         val kernelParameters = Pointer.to(kp: _*)
         // Start the GPU execution with the populated kernel parameters
+        // XILI
+        kernelStartTime = System.nanoTime()
+        // XILI
         launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream)
+
 
       // launch kernel multiple times (multiple stages), suitable for reduce
       case Some(totalStagesFun) =>
@@ -449,13 +453,27 @@ class CUDAFunction(
     outputHyIter.freeGPUMemory
     inputHyIter.freeGPUMemory
 
+
     JCuda.cudaStreamDestroy(stream)
+
+    // XILI
+    var kernelTimeInSeconds = (System.nanoTime() - kernelStartTime) / 1e9
+    println(f"kernel took $kernelTimeInSeconds%.3f seconds.")
+    println("inputHyIter.blockID = " + inputHyIter.blockId)
+    println("outputHyIter.blockID = " + outputHyIter.blockId)
+    println("inputHyIter.rddID = " + inputHyIter.rddId)
+    println("outputHyIter.rddID = " + outputHyIter.rddId)
+    if (GPUSparkEnv.get.gpuMemoryManager.cachedGPURDDs.contains(inputHyIter.rddId))
+      println("inputHyIter was cached")
+    else
+      println("inputHyIter was not cached")
+    if (GPUSparkEnv.get.gpuMemoryManager.cachedGPURDDs.contains(outputHyIter.rddId))
+      println("outputHyIter was cached")
+    else
+      println("outputHyIter was not cached")
+    // XILI
+
 
     outputHyIter.asInstanceOf[Iterator[U]]
   }
 }
-
-
-
-
-

@@ -34,27 +34,33 @@ import scala.collection.mutable.HashMap
 
 // scalastyle:off no.finalize
 private[gpuenabler] case class KernelParameterDesc(
-                                cpuArr: Array[_ >: Byte with Short with Int
-                                  with Float with Long with Double <: AnyVal],
-                                cpuPtr: Pointer,
-                                devPtr: CUdeviceptr,
-                                gpuPtr: Pointer,
-                                sz: Int,
-                                symbol: TermSymbol)
+                                                    cpuArr: Array[_ >: Byte with Short with Int
+                                                      with Float with Long with Double <: AnyVal],
+                                                    cpuPtr: Pointer,
+                                                    devPtr: CUdeviceptr,
+                                                    gpuPtr: Pointer,
+                                                    sz: Int,
+                                                    symbol: TermSymbol)
 
-private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T], 
-        colSchema: ColumnPartitionSchema,
-        __columnsOrder: Seq[String],
-        _blockId: Option[BlockId],
-        numentries: Int = 0,
-        outputArraySizes: Seq[Int] = null) extends Iterator[T] {
+private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
+                                                      colSchema: ColumnPartitionSchema,
+                                                      __columnsOrder: Seq[String],
+                                                      _blockId: Option[BlockId],
+                                                      numentries: Int = 0,
+                                                      outputArraySizes: Seq[Int] = null) extends Iterator[T] {
 
   private var _arr: Array[T] = inputArr
 
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
+    var gpuToCpuTimeStart = System.nanoTime
     copyGpuToCpu
+    val gpuToCpuTime = (System.nanoTime - gpuToCpuTimeStart) / 1e9
+    println(f"gpuToCpu took $gpuToCpuTime%.3f seconds.")
+    var getResultListTimeStart = System.nanoTime
     _arr = getResultList
+    val getResultListTime = (System.nanoTime - getResultListTimeStart) / 1e9
+    println(f"getResultList took $getResultListTime%.3f seconds.")
     _arr
   } else {
     _arr
@@ -71,7 +77,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   }
 
   private val _outputArraySizes = if (outputArraySizes != null) {
-    outputArraySizes 
+    outputArraySizes
   } else {
     val tempbuf = new ArrayBuffer[Int]()
     // if outputArraySizes is not provided by user program; create one
@@ -145,7 +151,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       if (kpd.devPtr == null) {
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(kpd.sz)
         cuMemcpyHtoDAsync(devPtr, kpd.cpuPtr, kpd.sz, cuStream)
-	cuCtxSynchronize()
+        cuCtxSynchronize()
         val gPtr = Pointer.to(devPtr)
         KernelParameterDesc(kpd.cpuArr, kpd.cpuPtr, devPtr, gPtr, kpd.sz, kpd.symbol)
       } else {
@@ -160,27 +166,27 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     // Ensure main memory is allocated to hold the GPU data
     if (_listKernParmDesc == null) return
     _listKernParmDesc = (_listKernParmDesc, colSchema.orderedColumns(columnsOrder)).
-        zipped.map((kpd, col) => {
+      zipped.map((kpd, col) => {
       if (kpd.cpuArr == null && kpd.cpuPtr == null && kpd.devPtr != null) {
         val (cpuArr, cpuPtr: Pointer) = col.columnType match {
           case c if c == INT_COLUMN => {
-            val y = new Array[Int](kpd.sz/ INT_COLUMN.bytes)
+            val y = new Array[Int](kpd.sz / INT_COLUMN.bytes)
             (y, Pointer.to(y))
           }
           case c if c == SHORT_COLUMN => {
-            val y = new Array[Short](kpd.sz/ SHORT_COLUMN.bytes)
+            val y = new Array[Short](kpd.sz / SHORT_COLUMN.bytes)
             (y, Pointer.to(y))
           }
           case c if c == BYTE_COLUMN => {
-            val y = new Array[Byte](kpd.sz/ BYTE_COLUMN.bytes)
+            val y = new Array[Byte](kpd.sz / BYTE_COLUMN.bytes)
             (y, Pointer.to(y))
           }
           case c if c == LONG_COLUMN => {
-            val y = new Array[Long](kpd.sz/ LONG_COLUMN.bytes)
+            val y = new Array[Long](kpd.sz / LONG_COLUMN.bytes)
             (y, Pointer.to(y))
           }
           case c if c == FLOAT_COLUMN => {
-            val y = new Array[Float](kpd.sz/ FLOAT_COLUMN.bytes)
+            val y = new Array[Float](kpd.sz / FLOAT_COLUMN.bytes)
             (y, Pointer.to(y))
           }
           case c if c == DOUBLE_COLUMN => {
@@ -204,7 +210,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
             (y, Pointer.to(y))
           }
         }
-        cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, cuStream) 
+        cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, cuStream)
         KernelParameterDesc(cpuArr, cpuPtr, kpd.devPtr, kpd.gpuPtr, kpd.sz, kpd.symbol)
       } else {
         kpd
@@ -261,22 +267,22 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         }
 
         val (hPtr: Pointer, colDataSize: Int) = {
-           val mirror = ColumnPartitionSchema.mirror
-           val priv_getter = col.terms.foldLeft(identity[Any] _)((r, term) =>
-              ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
+          val mirror = ColumnPartitionSchema.mirror
+          val priv_getter = col.terms.foldLeft(identity[Any] _)((r, term) =>
+            ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
 
           var bufferOffset = 0
 
           col.columnType match {
             case c if c == INT_COLUMN => {
               val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)        
+              val (ptr, buffer) = allocPinnedHeap(size)
               inputArr.foreach(x => buffer.putInt(priv_getter(x).asInstanceOf[Int]))
               (ptr, size)
             }
             case c if c == LONG_COLUMN => {
               val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)        
+              val (ptr, buffer) = allocPinnedHeap(size)
               inputArr.foreach(x => buffer.putLong(priv_getter(x).asInstanceOf[Long]))
               (ptr, size)
             }
@@ -288,7 +294,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
             }
             case c if c == BYTE_COLUMN => {
               val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)              
+              val (ptr, buffer) = allocPinnedHeap(size)
               inputArr.foreach(x => buffer.put(priv_getter(x).asInstanceOf[Byte]))
               (ptr, size)
             }
@@ -308,7 +314,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
               // retrieve the first element to determine the array size.
               val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Int]].length
               val size = col.memoryUsage(inputArr.length * arrLength).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)              
+              val (ptr, buffer) = allocPinnedHeap(size)
               inputArr.foreach(x => {
                 buffer.position(bufferOffset)
                 buffer.asIntBuffer().put(priv_getter(x).asInstanceOf[Array[Int]], 0, arrLength)
@@ -334,7 +340,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
               // retrieve the first element to determine the array size.
               val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Float]].length
               val size = col.memoryUsage(inputArr.length * arrLength).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)              
+              val (ptr, buffer) = allocPinnedHeap(size)
               inputArr.foreach(x => {
                 buffer.position(bufferOffset)
                 buffer.asFloatBuffer().put(priv_getter(x).asInstanceOf[Array[Float]], 0, arrLength)
@@ -368,7 +374,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     }
     cuCtxSynchronize()
     kernParamDesc
-  } else if (numentries != 0) { // initEmptyArrays - mostly used by output argument list
+  } else if (numentries != 0) {
+    // initEmptyArrays - mostly used by output argument list
     // set the number of entries to numentries as its initialized to '0'
     _numElements = numentries
     val colOrderSizes = colSchema.orderedColumns(columnsOrder) zip _outputArraySizes
@@ -446,13 +453,13 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   def deserializeColumnValue(columnType: ColumnType, cpuArr: Array[_ >: Byte with Short with Int
     with Float with Long with Double <: AnyVal], index: Int, outsize: Int = 0): Any = {
     columnType match {
-      case  INT_COLUMN => cpuArr(index).asInstanceOf[Int]
-      case  LONG_COLUMN => cpuArr(index).asInstanceOf[Long]
-      case  SHORT_COLUMN => cpuArr(index).asInstanceOf[Short]
-      case  BYTE_COLUMN => cpuArr(index).asInstanceOf[Byte]
-      case  FLOAT_COLUMN => cpuArr(index).asInstanceOf[Float]
-      case  DOUBLE_COLUMN => cpuArr(index).asInstanceOf[Double]
-      case  INT_ARRAY_COLUMN => {
+      case INT_COLUMN => cpuArr(index).asInstanceOf[Int]
+      case LONG_COLUMN => cpuArr(index).asInstanceOf[Long]
+      case SHORT_COLUMN => cpuArr(index).asInstanceOf[Short]
+      case BYTE_COLUMN => cpuArr(index).asInstanceOf[Byte]
+      case FLOAT_COLUMN => cpuArr(index).asInstanceOf[Float]
+      case DOUBLE_COLUMN => cpuArr(index).asInstanceOf[Double]
+      case INT_ARRAY_COLUMN => {
         val array = new Array[Int](outsize)
         var runIndex = index
         for (i <- 0 to outsize - 1) {
@@ -461,7 +468,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         }
         array
       }
-      case  LONG_ARRAY_COLUMN => {
+      case LONG_ARRAY_COLUMN => {
         val array = new Array[Long](outsize)
         var runIndex = index
         for (i <- 0 to outsize - 1) {
@@ -470,7 +477,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         }
         array
       }
-      case  FLOAT_ARRAY_COLUMN => {
+      case FLOAT_ARRAY_COLUMN => {
         val array = new Array[Float](outsize)
         var runIndex = index
 
@@ -480,7 +487,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         }
         array
       }
-      case  DOUBLE_ARRAY_COLUMN => {
+      case DOUBLE_ARRAY_COLUMN => {
         val array = new Array[Double](outsize)
         var runIndex = index
 
@@ -504,7 +511,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
             val retObj = deserializeColumnValue(col.columnType,
               cdesc.cpuArr, index * outsize, outsize)
             retObj
-        }).head
+          }).head
       } else {
         // For non-primitive types create an object on the fly and populate the values
         val retObj = instantiateClass(runtimeCls)

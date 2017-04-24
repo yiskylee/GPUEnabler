@@ -105,10 +105,16 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       }
     }
 
+    //XILI
+    var kernelStartTime = System.nanoTime()
+    //XILI
     val resultIter = kernel.compute[U, T](inputHyIter,
       Seq(inputColSchema, outputColSchema), None,
       outputArraySizes, inputFreeVariables, Some(blockId))
-
+    //XILI
+    var kernelTimeInSeconds = (System.nanoTime() - kernelStartTime) / 1e9
+    println(f"kernel compute took $kernelTimeInSeconds%.3f seconds.")
+    //XILI
     resultIter
   }
 }
