@@ -113,7 +113,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       outputArraySizes, inputFreeVariables, Some(blockId))
     //XILI
     var kernelTimeInSeconds = (System.nanoTime() - kernelStartTime) / 1e9
-    println(f"kernel compute took $kernelTimeInSeconds%.3f seconds.")
+    println(f"CUDARDDUtils: 116 kernel compute took $kernelTimeInSeconds%.3f seconds.")
     //XILI
     resultIter
   }

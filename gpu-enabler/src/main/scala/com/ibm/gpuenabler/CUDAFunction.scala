@@ -22,8 +22,8 @@ import java.net.URL
 
 import jcuda.Pointer
 import jcuda.driver.JCudaDriver._
-import jcuda.driver.{CUdeviceptr, CUfunction, CUstream}
-import jcuda.runtime.{JCuda, cudaStream_t}
+import jcuda.driver.{CUdeviceptr, CUfunction, CUstream, JCudaDriver}
+import jcuda.runtime.{JCuda, cudaEvent_t, cudaStream_t}
 import org.apache.commons.io.IOUtils
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, RDDBlockId}
@@ -248,8 +248,11 @@ class CUDAFunction(
     //    val sw = new StringWriter
     //    new Exception("stacktrace").printStackTrace(new PrintWriter(sw))
     //    println(sw.toString)
-    //    // XILI
 
+
+
+
+    //    // XILI
     cuLaunchKernel(function,
       gpuGridSize, 1, 1, // how many blocks
       gpuBlockSize, 1, 1, // threads per block (eg. 1024)
@@ -407,10 +410,24 @@ class CUDAFunction(
         val kernelParameters = Pointer.to(kp: _*)
         // Start the GPU execution with the populated kernel parameters
         // XILI
+        var start = new cudaEvent_t
+        var stop = new cudaEvent_t
+        JCuda.cudaEventCreate(start)
+        JCuda.cudaEventCreate(stop)
+        var elapsedTime: Array[Float] = new Array[Float](1)
+        JCuda.cudaEventRecord(start, null)
         kernelStartTime = System.nanoTime()
         // XILI
+        println("numElements: " + inputHyIter.numElements)
         launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream)
+        JCuda.cudaEventRecord(stop, null)
+        JCuda.cudaDeviceSynchronize()
 
+        JCuda.cudaEventElapsedTime(elapsedTime, start, stop)
+        var kernelEventTime = elapsedTime(0) / 1e9
+        println(f"kernel using event took $kernelEventTime%.3f seconds.")
+        JCuda.cudaEventDestroy(start)
+        JCuda.cudaEventDestroy(stop)
 
       // launch kernel multiple times (multiple stages), suitable for reduce
       case Some(totalStagesFun) =>
@@ -459,6 +476,7 @@ class CUDAFunction(
     // XILI
     var kernelTimeInSeconds = (System.nanoTime() - kernelStartTime) / 1e9
     println(f"kernel took $kernelTimeInSeconds%.3f seconds.")
+
     println("inputHyIter.blockID = " + inputHyIter.blockId)
     println("outputHyIter.blockID = " + outputHyIter.blockId)
     println("inputHyIter.rddID = " + inputHyIter.rddId)
