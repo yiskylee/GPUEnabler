@@ -362,7 +362,11 @@ class CUDAFunction(
     var listDevPtr: List[CUdeviceptr] = null
 
     // hardcoded first argument
-    val (arr, hptr, devPtr: CUdeviceptr, gptr, sz) = createkernelParameterDesc2(inputHyIter.numElements, cuStream)
+    // XILI
+    val (arr, hptr, devPtr: CUdeviceptr, gptr, sz) =
+      GPUTimers.time(createkernelParameterDesc2(inputHyIter.numElements, cuStream),
+        cuStream, "HtoD(inputHyIter.numElements)")
+    //XILI
 
     listDevPtr = List(devPtr)
     // size + input Args based on inputColumnOrder + constArgs
@@ -376,8 +380,10 @@ class CUDAFunction(
 
     // add additional user input parameters
     if (inputFreeVariables != null) {
+      // XILI
       val inputFreeVarPtrs = inputFreeVariables.map { inputFreeVariable =>
-        createkernelParameterDesc2(inputFreeVariable, cuStream)
+        GPUTimers.time(createkernelParameterDesc2(inputFreeVariable, cuStream),
+          cuStream, "HtoD(inputFreeVariables")
       }
       kp = kp ++ inputFreeVarPtrs.map(_._4) // gptr
       listDevPtr = listDevPtr ++ inputFreeVarPtrs.map(_._3) // CUdeviceptr
@@ -385,7 +391,9 @@ class CUDAFunction(
 
     // add outputArraySizes to the list of arguments
     if (outputArraySizes != null) {
-      val outputArraySizes_kpd = createkernelParameterDesc2(outputArraySizes.toArray, cuStream)
+      val outputArraySizes_kpd = GPUTimers.time(
+        createkernelParameterDesc2(outputArraySizes.toArray, cuStream),
+        cuStream, "HtoD(outputArraySizes)")
       kp = kp ++ Seq(outputArraySizes_kpd._4) // gpuPtr
       listDevPtr = listDevPtr ++ List(outputArraySizes_kpd._3) // CUdeviceptr
     }
@@ -393,15 +401,13 @@ class CUDAFunction(
     // add user provided constant variables
     if (constArgs != null) {
       val inputConstPtrs = constArgs.map { constVariable =>
-        createkernelParameterDesc2(constVariable, cuStream)
+        GPUTimers.time(createkernelParameterDesc2(constVariable, cuStream),
+          cuStream,
+          "HtoD(constArgs)")
       }
       kp = kp ++ inputConstPtrs.map(_._4) // gpuPtr
       listDevPtr = listDevPtr ++ inputConstPtrs.map(_._3) // CUdeviceptr
     }
-
-    // XILI
-    var kernelStartTime = 0L
-    // XILI
 
     stagesCount match {
       // normal launch, no stages, suitable for map
@@ -410,26 +416,9 @@ class CUDAFunction(
         val kernelParameters = Pointer.to(kp: _*)
         // Start the GPU execution with the populated kernel parameters
         // XILI
-        val start = new CUevent
-        val stop = new CUevent
-
-        JCudaDriver.cuEventCreate(start, 0)
-        JCudaDriver.cuEventCreate(stop, 0)
-
-        var elapsedTime: Array[Float] = new Array[Float](1)
-        JCudaDriver.cuEventRecord(start, cuStream)
-        kernelStartTime = System.nanoTime()
+        GPUTimers.time(launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream),
+          cuStream, "Execution")
         // XILI
-        println("numElements: " + inputHyIter.numElements)
-        launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream)
-        JCudaDriver.cuEventRecord(stop, cuStream)
-        JCuda.cudaDeviceSynchronize()
-
-        JCudaDriver.cuEventElapsedTime(elapsedTime, start, stop)
-        var kernelEventTime = elapsedTime(0)
-        println(f"kernel using event took $kernelEventTime%.3f milliseconds.")
-        JCudaDriver.cuEventDestroy(start)
-        JCudaDriver.cuEventDestroy(stop)
 
       // launch kernel multiple times (multiple stages), suitable for reduce
       case Some(totalStagesFun) =>
@@ -437,6 +426,10 @@ class CUDAFunction(
         if (totalStages <= 0) {
           throw new SparkException("Number of stages in a kernel launch must be positive")
         }
+
+        // XILI
+        println("totalStagesFun exists")
+        // XILI
 
         // preserve the kernel parameter list so as to use it for every stage.
         val preserve_kp = kp
@@ -472,27 +465,7 @@ class CUDAFunction(
     outputHyIter.freeGPUMemory
     inputHyIter.freeGPUMemory
 
-
     JCuda.cudaStreamDestroy(stream)
-
-    // XILI
-    var kernelTimeInSeconds = (System.nanoTime() - kernelStartTime) / 1e9
-    println(f"kernel took $kernelTimeInSeconds%.3f seconds.")
-
-    println("inputHyIter.blockID = " + inputHyIter.blockId)
-    println("outputHyIter.blockID = " + outputHyIter.blockId)
-    println("inputHyIter.rddID = " + inputHyIter.rddId)
-    println("outputHyIter.rddID = " + outputHyIter.rddId)
-    if (GPUSparkEnv.get.gpuMemoryManager.cachedGPURDDs.contains(inputHyIter.rddId))
-      println("inputHyIter was cached")
-    else
-      println("inputHyIter was not cached")
-    if (GPUSparkEnv.get.gpuMemoryManager.cachedGPURDDs.contains(outputHyIter.rddId))
-      println("outputHyIter was cached")
-    else
-      println("outputHyIter was not cached")
-    // XILI
-
 
     outputHyIter.asInstanceOf[Iterator[U]]
   }

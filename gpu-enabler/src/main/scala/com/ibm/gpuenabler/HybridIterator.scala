@@ -53,14 +53,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
-    var gpuToCpuTimeStart = System.nanoTime
     copyGpuToCpu
-    val gpuToCpuTime = (System.nanoTime - gpuToCpuTimeStart) / 1e9
-    println(f"gpuToCpu took $gpuToCpuTime%.3f seconds.")
-    var getResultListTimeStart = System.nanoTime
-    _arr = getResultList
-    val getResultListTime = (System.nanoTime - getResultListTimeStart) / 1e9
-    println(f"getResultList took $getResultListTime%.3f seconds.")
+    _arr = CPUTimer.time(getResultList, "getResultList")
     _arr
   } else {
     _arr
@@ -150,7 +144,10 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     _listKernParmDesc = _listKernParmDesc.map(kpd => {
       if (kpd.devPtr == null) {
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(kpd.sz)
-        cuMemcpyHtoDAsync(devPtr, kpd.cpuPtr, kpd.sz, cuStream)
+        // XILI
+        GPUTimers.time(cuMemcpyHtoDAsync(devPtr, kpd.cpuPtr, kpd.sz, cuStream),
+          cuStream, "HtoD(copyCpuToGpu)")
+        // XILI
         cuCtxSynchronize()
         val gPtr = Pointer.to(devPtr)
         KernelParameterDesc(kpd.cpuArr, kpd.cpuPtr, devPtr, gPtr, kpd.sz, kpd.symbol)
@@ -210,13 +207,18 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
             (y, Pointer.to(y))
           }
         }
-        cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, cuStream)
+        // XILI
+        GPUTimers.time(cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, cuStream),
+          cuStream, "DtoH")
+        // XILI
         KernelParameterDesc(cpuArr, cpuPtr, kpd.devPtr, kpd.gpuPtr, kpd.sz, kpd.symbol)
       } else {
         kpd
       }
     })
     cuCtxSynchronize()
+
+
   }
 
   // Extract the getter method from the given object using reflection
@@ -365,7 +367,14 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
           }
         }
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(colDataSize)
-        cuMemcpyHtoDAsync(devPtr, hPtr, colDataSize, cuStream)
+        // XILI
+//        val timer = new GPUTimer(cuStream, "HtoD(_listKernParmDesc)")
+//        timer.start
+        println("colDataSize: " + colDataSize)
+        GPUTimers.time (cuMemcpyHtoDAsync(devPtr, hPtr, colDataSize, cuStream),
+          cuStream, "HtoD(_listKernParmDesc)")
+//        timer.stop
+        // XILI
         val gPtr = Pointer.to(devPtr)
 
         // mark the cpuPtr null as we use pinned memory and got the Pointer directly
