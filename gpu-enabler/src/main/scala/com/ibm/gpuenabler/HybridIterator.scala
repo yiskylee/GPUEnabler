@@ -368,12 +368,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         }
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(colDataSize)
         // XILI
-//        val timer = new GPUTimer(cuStream, "HtoD(_listKernParmDesc)")
-//        timer.start
-        println("colDataSize: " + colDataSize)
         GPUTimers.time (cuMemcpyHtoDAsync(devPtr, hPtr, colDataSize, cuStream),
           cuStream, "HtoD(_listKernParmDesc)")
-//        timer.stop
         // XILI
         val gPtr = Pointer.to(devPtr)
 
@@ -513,31 +509,51 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     val resultsArray = new Array[T](numElements)
     val runtimeCls = implicitly[ClassTag[T]].runtimeClass
 
-    for (index <- 0 to numElements - 1) {
-      val obj = if (colSchema.isPrimitive) {
-        (colSchema.orderedColumns(columnsOrder), listKernParmDesc, _outputArraySizes).zipped.map(
+    if (colSchema.isPrimitive) {
+      for (index <- 0 to numElements - 1) {
+        resultsArray(index) = (colSchema.orderedColumns(columnsOrder), listKernParmDesc, _outputArraySizes).zipped.map(
           (col, cdesc, outsize) => {
             val retObj = deserializeColumnValue(col.columnType,
               cdesc.cpuArr, index * outsize, outsize)
             retObj
-          }).head
-      } else {
-        // For non-primitive types create an object on the fly and populate the values
-        val retObj = instantiateClass(runtimeCls)
-
+          }).head.asInstanceOf[T]
+      }
+    } else {
+      val retObj = instantiateClass(runtimeCls)
+      for (index <- 0 to numElements - 1) {
         (colSchema.orderedColumns(columnsOrder), listKernParmDesc,
           _outputArraySizes).zipped.foreach(
           (col, cdesc, outsize) => {
             setter(retObj, deserializeColumnValue(col.columnType, cdesc.cpuArr,
               index * outsize, outsize), cdesc.symbol)
           })
-        retObj
+        resultsArray(index) = retObj.asInstanceOf[T]
       }
-      resultsArray(index) = obj.asInstanceOf[T]
     }
     resultsArray
+//
+//
+//    for (index <- 0 to numElements - 1) {
+//      val obj = if (colSchema.isPrimitive) {
+//        (colSchema.orderedColumns(columnsOrder), listKernParmDesc, _outputArraySizes).zipped.map(
+//          (col, cdesc, outsize) => {
+//            val retObj = deserializeColumnValue(col.columnType,
+//              cdesc.cpuArr, index * outsize, outsize)
+//            retObj
+//          }).head
+//      } else {
+//        // For non-primitive types create an object on the fly and populate the values
+//        val retObj = instantiateClass(runtimeCls)
+//        (colSchema.orderedColumns(columnsOrder), listKernParmDesc,
+//          _outputArraySizes).zipped.foreach(
+//          (col, cdesc, outsize) => {
+//            setter(retObj, deserializeColumnValue(col.columnType, cdesc.cpuArr,
+//              index * outsize, outsize), cdesc.symbol)
+//          })
+//        retObj
+//      }
+//      resultsArray(index) = obj.asInstanceOf[T]
+//    }
+//    resultsArray
   }
 }
-
-
-
