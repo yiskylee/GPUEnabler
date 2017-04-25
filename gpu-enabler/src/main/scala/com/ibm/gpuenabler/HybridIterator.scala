@@ -519,8 +519,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
           }).head.asInstanceOf[T]
       }
     } else {
-      val retObj = instantiateClass(runtimeCls)
       for (index <- 0 to numElements - 1) {
+        val retObj = instantiateClass(runtimeCls)
         (colSchema.orderedColumns(columnsOrder), listKernParmDesc,
           _outputArraySizes).zipped.foreach(
           (col, cdesc, outsize) => {
