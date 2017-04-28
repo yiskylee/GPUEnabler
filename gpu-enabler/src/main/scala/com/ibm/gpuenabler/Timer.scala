@@ -31,18 +31,23 @@ object GPUTimers {
     timers.foreach (t => totalTime = totalTime + t.getTime)
     totalTime
   }
-  def printStats: Unit = {
+  def printStatsDetail: Unit = {
     for (timer <- timers) {
       val time = timer.getTime / 1e3
       println(timer.stream + "->" + timer.eventType +
         ": " + f"$time%.5f seconds")
     }
+    printStats
+  }
+
+  def printStats: Unit = {
     val totalTime = sum / 1e3
     println("Total GPU Time: " + f"$totalTime%.5f seconds")
   }
 }
 
 object CPUTimer {
+  private var times = new mutable.HashMap[String, Double]
   def time[R](block: => R, name: String): R = {
     val t0 = System.nanoTime()
     val result = block
@@ -50,6 +55,36 @@ object CPUTimer {
     val t = (t1 - t0) / 1e9
     println(name + ": " + f"$t%.5f seconds")
     result
+  }
+  def accumuTime[R](block: => R, name: String): R = {
+    val t0 = System.nanoTime()
+    val result = block
+    val t1 = System.nanoTime()
+    val t = (t1 - t0) / 1e9
+    if (times.contains(name))
+      times(name) += t
+    else
+      times(name) = t
+    result
+  }
+  def sum: Double = {
+    var totalTime: Double = 0
+    for ((name, time) <- times) {
+      totalTime += time
+    }
+    totalTime
+  }
+  def printStats: Unit = {
+    for ((name, time) <- times) {
+      println(name + ": " + f"$time%.5f seconds")
+    }
+    val totalTime = sum
+    println("Total CPU Time: " + f"$totalTime%.5f seconds")
+  }
+  def clear: Unit = {
+    for ((name, time) <- times) {
+      times(name) = 0.0
+    }
   }
 }
 
