@@ -29,6 +29,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.reflect.runtime._
+import scala.reflect.runtime.{universe => ru}
 import scala.reflect.runtime.universe.TermSymbol
 import scala.collection.mutable.HashMap
 
@@ -54,7 +55,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
     copyGpuToCpu
-    _arr = CPUTimer.time(getResultList, "getResultList")
+    _arr = CPUTimer.accumuTime(getResultList, "getResultList")
     _arr
   } else {
     _arr
@@ -257,7 +258,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   def listKernParmDesc: Seq[KernelParameterDesc] = _listKernParmDesc
 
-  private var _listKernParmDesc = if (inputArr != null && inputArr.length > 0) {
+  private var _listKernParmDesc = if (inputArr != null && inputArr.length > 0) CPUTimer.accumuTime({
     // initFromInputIterator
     val kernParamDesc = colSchema.orderedColumns(columnsOrder).map { col =>
       cachedGPUPointers.getOrElseUpdate(blockId.get + col.prettyAccessor, {
@@ -379,7 +380,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     }
     cuCtxSynchronize()
     kernParamDesc
-  } else if (numentries != 0) {
+  }, "_listKernParmDesc(input)") else if (numentries != 0) CPUTimer.accumuTime({
     // initEmptyArrays - mostly used by output argument list
     // set the number of entries to numentries as its initialized to '0'
     _numElements = numentries
@@ -437,16 +438,16 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     }
     cuCtxSynchronize()
     kernParamDesc
-  } else {
+  }, "_listKernParmDesc(output)") else {
     null
   }
 
   // Use reflection to instantiate object without calling constructor
   private def instantiateClass(cls: Class[_]): AnyRef = {
-    val rf = sun.reflect.ReflectionFactory.getReflectionFactory
-    val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
-    val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
-    val obj = newCtor.newInstance().asInstanceOf[AnyRef]
+    val rf = CPUTimer.accumuTime(sun.reflect.ReflectionFactory.getReflectionFactory, "getFact")
+    val parentCtor = CPUTimer.accumuTime(classOf[java.lang.Object].getDeclaredConstructor(), "decCtr")
+    val newCtor = CPUTimer.accumuTime(rf.newConstructorForSerialization(cls, parentCtor), "newCtor")
+    val obj = CPUTimer.accumuTime(newCtor.newInstance().asInstanceOf[AnyRef], "newInstance")
     obj
   }
 
@@ -505,13 +506,28 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     }
   }
 
+//  private val mirror = ru.runtimeMirror(getClass.getClassLoader)
+  private val rf = sun.reflect.ReflectionFactory.getReflectionFactory
+  private val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+
+
   def getResultList: Array[T] = {
     val resultsArray = new Array[T](numElements)
     val runtimeCls = implicitly[ClassTag[T]].runtimeClass
+    val newCtor = rf.newConstructorForSerialization(runtimeCls, parentCtor)
+
+
+//    val runtimeCls2 = mirror.reflectClass(ru.typeOf[T].typeSymbol.asClass)
+//    val runtimeCls2 = mirror.reflectClass(ru.typeTag[T].tpe.typeSymbol.asClass)
+//    val ctor = ru.typeTag[T].tpe.decl(ru.nme.CONSTRUCTOR).asMethod
+//    val ctorm = runtimeCls2.reflectConstructor(ctor)
+
+
+    val cols = colSchema.orderedColumns(columnsOrder)
 
     if (colSchema.isPrimitive) {
       for (index <- 0 to numElements - 1) {
-        resultsArray(index) = (colSchema.orderedColumns(columnsOrder), listKernParmDesc, _outputArraySizes).zipped.map(
+        resultsArray(index) = (cols, listKernParmDesc, _outputArraySizes).zipped.map(
           (col, cdesc, outsize) => {
             val retObj = deserializeColumnValue(col.columnType,
               cdesc.cpuArr, index * outsize, outsize)
@@ -520,8 +536,11 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       }
     } else {
       for (index <- 0 to numElements - 1) {
-        val retObj = instantiateClass(runtimeCls)
-        (colSchema.orderedColumns(columnsOrder), listKernParmDesc,
+        val retObj = newCtor.newInstance().asInstanceOf[AnyRef]
+//        val retObj = CPUTimer.accumuTime(instantiateClass(runtimeCls), "instantiateClass")
+//        val retObj2 = CPUTimer.accumuTime(ctorm, "instantiateClass2")
+
+        (cols, listKernParmDesc,
           _outputArraySizes).zipped.foreach(
           (col, cdesc, outsize) => {
             setter(retObj, deserializeColumnValue(col.columnType, cdesc.cpuArr,
