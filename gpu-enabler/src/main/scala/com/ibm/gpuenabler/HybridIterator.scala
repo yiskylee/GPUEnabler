@@ -258,7 +258,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   def listKernParmDesc: Seq[KernelParameterDesc] = _listKernParmDesc
 
-  private var _listKernParmDesc = if (inputArr != null && inputArr.length > 0) CPUTimer.accumuTime({
+  private var _listKernParmDesc = if (inputArr != null && inputArr.length > 0) {
     // initFromInputIterator
     val kernParamDesc = colSchema.orderedColumns(columnsOrder).map { col =>
       cachedGPUPointers.getOrElseUpdate(blockId.get + col.prettyAccessor, {
@@ -380,7 +380,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     }
     cuCtxSynchronize()
     kernParamDesc
-  }, "_listKernParmDesc(input)") else if (numentries != 0) CPUTimer.accumuTime({
+  } else if (numentries != 0) {
     // initEmptyArrays - mostly used by output argument list
     // set the number of entries to numentries as its initialized to '0'
     _numElements = numentries
@@ -438,16 +438,16 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     }
     cuCtxSynchronize()
     kernParamDesc
-  }, "_listKernParmDesc(output)") else {
+  } else {
     null
   }
 
   // Use reflection to instantiate object without calling constructor
   private def instantiateClass(cls: Class[_]): AnyRef = {
-    val rf = CPUTimer.accumuTime(sun.reflect.ReflectionFactory.getReflectionFactory, "getFact")
-    val parentCtor = CPUTimer.accumuTime(classOf[java.lang.Object].getDeclaredConstructor(), "decCtr")
-    val newCtor = CPUTimer.accumuTime(rf.newConstructorForSerialization(cls, parentCtor), "newCtor")
-    val obj = CPUTimer.accumuTime(newCtor.newInstance().asInstanceOf[AnyRef], "newInstance")
+    val rf = sun.reflect.ReflectionFactory.getReflectionFactory
+    val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+    val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
+    val obj = newCtor.newInstance().asInstanceOf[AnyRef]
     obj
   }
 

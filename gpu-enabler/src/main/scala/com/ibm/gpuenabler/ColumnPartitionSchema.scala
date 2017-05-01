@@ -42,8 +42,9 @@ private[gpuenabler] object ColumnPartitionSchema {
   // TODO check out if synchronization etc. is needed - see bug
   // https://issues.scala-lang.org/browse/SI-6240 about reflection not being thread-safe before 2.11
   // http://docs.scala-lang.org/overviews/reflection/thread-safety.html
-  private[gpuenabler] val mirror: universe.Mirror = CPUTimer.time(
-    universe.runtimeMirror(Thread.currentThread().getContextClassLoader), "mirror")
+
+  private[gpuenabler] val mirror: universe.Mirror =
+    universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
 
   var onlyLoadableClassesSupported: Boolean = false
 
@@ -113,8 +114,8 @@ private[gpuenabler] object ColumnPartitionSchema {
       }
     }
 
-    val runtimeCls = CPUTimer.time(implicitly[ClassTag[T]].runtimeClass, "runtimeCls")
-    val columns = CPUTimer.time(runtimeCls match {
+    val runtimeCls = implicitly[ClassTag[T]].runtimeClass
+    val columns = runtimeCls match {
       // special case for primitives, since their type signature shows up as AnyVal instead
       case c if c == classOf[Byte] => Vector(new ColumnSchema(BYTE_COLUMN))
       case c if c == classOf[Short] => Vector(new ColumnSchema(SHORT_COLUMN))
@@ -133,9 +134,9 @@ private[gpuenabler] object ColumnPartitionSchema {
       case _ =>
         val clsSymbol = mirror.classSymbol(runtimeCls)
         columnsFor(clsSymbol.typeSignature)
-    }, "columns")
+    }
 
-    CPUTimer.time(new ColumnPartitionSchema(columns.toArray, runtimeCls), "New ColumnPartitionSchema")
+    new ColumnPartitionSchema(columns.toArray, runtimeCls)
   }
 }
 

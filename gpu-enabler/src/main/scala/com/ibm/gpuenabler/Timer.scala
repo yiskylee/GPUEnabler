@@ -4,9 +4,6 @@ import jcuda.driver.{CUevent, CUstream, JCudaDriver}
 
 import scala.collection.mutable
 
-
-
-
 object CPUTimer {
   private var times = new mutable.HashMap[String, Double]
   def time[R](block: => R, name: String): R = {

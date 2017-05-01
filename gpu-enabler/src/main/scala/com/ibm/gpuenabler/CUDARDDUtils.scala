@@ -81,8 +81,8 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  private val inputColSchema: ColumnPartitionSchema = CPUTimer.time(ColumnPartitionSchema.schemaFor[T], "schemaForT")
-  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
+  private val inputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
+  private val outputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[U]
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
     // Use the block ID of this particular (rdd, partition)
@@ -105,9 +105,9 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       }
     }
 
-    val resultIter = CPUTimer.accumuTime(kernel.compute[U, T](inputHyIter,
+    val resultIter = kernel.compute[U, T](inputHyIter,
       Seq(inputColSchema, outputColSchema), None,
-      outputArraySizes, inputFreeVariables, Some(blockId)), "kernel.compute")
+      outputArraySizes, inputFreeVariables, Some(blockId))
     resultIter
   }
 }
@@ -275,8 +275,8 @@ object CUDARDDImplicits {
                                 inputFreeVariables: Seq[Any] = null): RDD[U] = {
       import org.apache.spark.gpuenabler.CUDAUtils
       val cleanF = CUDAUtils.cleanFn(sc, f) // sc.clean(f)
-      CPUTimer.accumuTime(new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter) => iter.map(cleanF),
-        extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables), "MapGPUPartition")
+      new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter) => iter.map(cleanF),
+        extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables)
     }
 
     /**
