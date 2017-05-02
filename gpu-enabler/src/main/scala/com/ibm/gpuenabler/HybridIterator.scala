@@ -54,7 +54,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
-    copyGpuToCpu
+    CPUTimer.accumuTime(copyGpuToCpu, "copyGpuToCpu")
     _arr = CPUTimer.accumuTime(getResultList, "getResultList")
     _arr
   } else {
@@ -453,7 +453,9 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   // Extract the setter method from the given object using reflection
   private def setter[C](obj: Any, value: C, symbol: TermSymbol) = {
-    currentMirror.reflect(obj).reflectField(symbol).set(value)
+    val mirror = CPUTimer.accumuTime(currentMirror, "getMirror")
+//    currentMirror.reflect(obj).reflectField(symbol).set(value)
+    CPUTimer.accumuTime(mirror.reflect(obj).reflectField(symbol).set(value), "reflect")
   }
 
   def deserializeColumnValue(columnType: ColumnType, cpuArr: Array[_ >: Byte with Short with Int
@@ -536,17 +538,19 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       }
     } else {
       for (index <- 0 to numElements - 1) {
-        val retObj = newCtor.newInstance().asInstanceOf[AnyRef]
+        val retObj = CPUTimer.accumuTime(newCtor.newInstance().asInstanceOf[AnyRef], "retObj")
 //        val retObj = CPUTimer.accumuTime(instantiateClass(runtimeCls), "instantiateClass")
 //        val retObj2 = CPUTimer.accumuTime(ctorm, "instantiateClass2")
 
-        (cols, listKernParmDesc,
-          _outputArraySizes).zipped.foreach(
+        (cols, listKernParmDesc, _outputArraySizes).zipped.foreach(
           (col, cdesc, outsize) => {
-            setter(retObj, deserializeColumnValue(col.columnType, cdesc.cpuArr,
-              index * outsize, outsize), cdesc.symbol)
+            CPUTimer.accumuTime(
+              setter(retObj,
+              CPUTimer.accumuTime(deserializeColumnValue(col.columnType, cdesc.cpuArr, index * outsize, outsize), "deserialize"),
+              cdesc.symbol),
+              "setter")
           })
-        resultsArray(index) = retObj.asInstanceOf[T]
+        CPUTimer.accumuTime(resultsArray(index) = retObj.asInstanceOf[T], "resultsArray")
       }
     }
     resultsArray

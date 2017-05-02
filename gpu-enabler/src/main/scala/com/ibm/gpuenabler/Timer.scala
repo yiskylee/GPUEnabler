@@ -3,9 +3,11 @@ package com.ibm.gpuenabler
 import jcuda.driver.{CUevent, CUstream, JCudaDriver}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 object CPUTimer {
   private var times = new mutable.HashMap[String, Double]
+  private var timesPerIter = new mutable.HashMap[String, ListBuffer[Double]]
   def time[R](block: => R, name: String): R = {
     val t0 = System.nanoTime()
     val result = block
@@ -25,12 +27,31 @@ object CPUTimer {
       times(name) = t
     result
   }
+  def iterTime[R](block: => R, name: String): R = {
+    val t0 = System.nanoTime
+    val result = block
+    val t1 = System.nanoTime
+    val t = (t1 - t0) / 1e6
+    if (!timesPerIter.contains(name))
+      timesPerIter(name) = new ListBuffer[Double]()
+    timesPerIter(name) += t
+    result
+  }
   def sum: Double = {
     var totalTime: Double = 0
     for ((name, time) <- times) {
       totalTime += time
     }
     totalTime
+  }
+  def printIterTime: Unit = {
+    for ((name, timeList) <- timesPerIter) {
+      print(name)
+      for (time <- timeList) {
+        print(", " + time)
+      }
+      println
+    }
   }
   def printStats: Unit = {
     for ((name, time) <- times) {
