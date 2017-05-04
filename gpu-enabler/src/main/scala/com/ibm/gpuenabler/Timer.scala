@@ -6,9 +6,9 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object CPUTimer {
-  private var times = new mutable.HashMap[String, Double]
+  private var timesAccum = new mutable.HashMap[String, Double]
   private var timesPerIter = new mutable.HashMap[String, ListBuffer[Double]]
-  def time[R](block: => R, name: String): R = {
+  def printTime[R](block: => R, name: String): R = {
     val t0 = System.nanoTime()
     val result = block
     val t1 = System.nanoTime()
@@ -21,30 +21,23 @@ object CPUTimer {
     val result = block
     val t1 = System.nanoTime()
     val t = (t1 - t0) / 1e6
-    if (times.contains(name))
-      times(name) += t
+    if (timesAccum.contains(name))
+      timesAccum(name) += t
     else
-      times(name) = t
+      timesAccum(name) = t
     result
   }
-  def iterTime[R](block: => R, name: String): R = {
-    val t0 = System.nanoTime
-    val result = block
-    val t1 = System.nanoTime
-    val t = (t1 - t0) / 1e6
-    if (!timesPerIter.contains(name))
-      timesPerIter(name) = new ListBuffer[Double]()
-    timesPerIter(name) += t
-    result
-  }
-  def sum: Double = {
-    var totalTime: Double = 0
-    for ((name, time) <- times) {
-      totalTime += time
+  // Gather accumulated time and port them to a table of time per iteration
+  // Then reset the accumulated time table for the next iteration
+  def restart(): Unit = {
+    for ((name, time) <- timesAccum) {
+      if (!timesPerIter.contains(name))
+        timesPerIter(name) = new ListBuffer[Double]()
+      timesPerIter(name) += time
+      timesAccum(name) = 0.0
     }
-    totalTime
   }
-  def printIterTime: Unit = {
+  def printIterTime(): Unit = {
     for ((name, timeList) <- timesPerIter) {
       print(name)
       for (time <- timeList) {
@@ -53,38 +46,39 @@ object CPUTimer {
       println
     }
   }
-  def printStats: Unit = {
-    for ((name, time) <- times) {
-      println(name + ": " + f"$time%.5f ms")
-    }
-    val totalTime = sum
-    println("Total CPU Time: " + f"$totalTime%.5f ms")
-  }
-  def clear: Unit = {
-    for ((name, time) <- times) {
-      times(name) = 0.0
-    }
-  }
+//  def sum: Double = {
+//    var totalTime: Double = 0
+//    for ((name, time) <- timesAccum) {
+//      totalTime += time
+//    }
+//    totalTime
+//  }
+//  def printStats: Unit = {
+//    for ((name, time) <- timesAccum) {
+//      println(name + ": " + f"$time%.5f ms")
+//    }
+//    val totalTime = sum
+//    println("Total CPU Time: " + f"$totalTime%.5f ms")
+//  }
+
 }
 
 object GPUTimers {
   private var timers = new mutable.ListBuffer[GPUTimer]()
   def time[R](block: =>R, stream: CUstream, eventType: String): R = {
     val timer = new GPUTimer(stream, eventType)
-    timer.start
+    timer.start()
     val result = block
-    timer.stop
-    addTimer(timer)
+    timer.stop()
+    timers += timer
     result
   }
+  def getTimers:mutable.ListBuffer[GPUTimer] = timers
 
-  def getTimers = timers
-  def addTimer(timer: GPUTimer): Unit = {
-    timers += timer
-  }
-  def clear: Unit = {
+
+  def clear(): Unit = {
     for (timer <- timers) {
-      timer.shutDown
+      timer.shutDown()
       timers -= timer
     }
   }
@@ -93,19 +87,26 @@ object GPUTimers {
     timers.foreach (t => totalTime = totalTime + t.getTime)
     totalTime
   }
-  def printStatsDetail: Unit = {
+  def printStatsDetail(): Unit = {
     for (timer <- timers) {
       val time = timer.getTime
       println(timer.stream + "->" + timer.eventType +
         ": " + f"$time%.5f ms")
     }
-    printStats
+    printStats()
   }
 
-  def printStats: Unit = {
+  def printStats(): Unit = {
     val totalTime = sum
     println("Total GPU Time: " + f"$totalTime%.5f ms")
   }
+
+  def printIterTime(): Unit = {
+    for (timer <- timers) {
+
+    }
+  }
+
 }
 
 
@@ -115,17 +116,17 @@ class GPUTimer(val stream: CUstream, val eventType: String) {
   private var synced: Boolean = false
   private var elapsedTime: Array[Float] = new Array[Float](1)
 
-  def start: Unit = {
+  def start(): Unit = {
     JCudaDriver.cuEventCreate(eventStart, 0)
     JCudaDriver.cuEventCreate(eventStop, 0)
     JCudaDriver.cuEventRecord(eventStart, stream)
   }
 
-  def stop: Unit = {
+  def stop(): Unit = {
     JCudaDriver.cuEventRecord(eventStop, stream)
   }
 
-  def sync: Unit = {
+  def sync(): Unit = {
     JCudaDriver.cuEventSynchronize(eventStop)
     synced = true
   }
@@ -134,13 +135,13 @@ class GPUTimer(val stream: CUstream, val eventType: String) {
     if (synced)
       elapsedTime(0)
     else {
-      sync
+      sync()
       JCudaDriver.cuEventElapsedTime(elapsedTime, eventStart, eventStop)
       elapsedTime(0)
     }
   }
 
-  def shutDown: Unit = {
+  def shutDown(): Unit = {
     JCudaDriver.cuEventDestroy(eventStart)
     JCudaDriver.cuEventDestroy(eventStop)
   }
