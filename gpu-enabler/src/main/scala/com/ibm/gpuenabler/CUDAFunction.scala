@@ -364,8 +364,8 @@ class CUDAFunction(
     // hardcoded first argument
     // XILI
     val (arr, hptr, devPtr: CUdeviceptr, gptr, sz) =
-      GPUTimers.time(createkernelParameterDesc2(inputHyIter.numElements, cuStream),
-        cuStream, "HtoD(inputHyIter.numElements)")
+      GPUTimer.time(createkernelParameterDesc2(inputHyIter.numElements, cuStream),
+        cuStream, "HtoD")
     //XILI
 
     listDevPtr = List(devPtr)
@@ -382,8 +382,8 @@ class CUDAFunction(
     if (inputFreeVariables != null) {
       // XILI
       val inputFreeVarPtrs = inputFreeVariables.map { inputFreeVariable =>
-        GPUTimers.time(createkernelParameterDesc2(inputFreeVariable, cuStream),
-          cuStream, "HtoD(inputFreeVariables")
+        GPUTimer.time(createkernelParameterDesc2(inputFreeVariable, cuStream),
+          cuStream, "HtoD")
       }
       kp = kp ++ inputFreeVarPtrs.map(_._4) // gptr
       listDevPtr = listDevPtr ++ inputFreeVarPtrs.map(_._3) // CUdeviceptr
@@ -391,9 +391,9 @@ class CUDAFunction(
 
     // add outputArraySizes to the list of arguments
     if (outputArraySizes != null) {
-      val outputArraySizes_kpd = GPUTimers.time(
+      val outputArraySizes_kpd = GPUTimer.time(
         createkernelParameterDesc2(outputArraySizes.toArray, cuStream),
-        cuStream, "HtoD(outputArraySizes)")
+        cuStream, "HtoD")
       kp = kp ++ Seq(outputArraySizes_kpd._4) // gpuPtr
       listDevPtr = listDevPtr ++ List(outputArraySizes_kpd._3) // CUdeviceptr
     }
@@ -401,9 +401,9 @@ class CUDAFunction(
     // add user provided constant variables
     if (constArgs != null) {
       val inputConstPtrs = constArgs.map { constVariable =>
-        GPUTimers.time(createkernelParameterDesc2(constVariable, cuStream),
+        GPUTimer.time(createkernelParameterDesc2(constVariable, cuStream),
           cuStream,
-          "HtoD(constArgs)")
+          "HtoD")
       }
       kp = kp ++ inputConstPtrs.map(_._4) // gpuPtr
       listDevPtr = listDevPtr ++ inputConstPtrs.map(_._3) // CUdeviceptr
@@ -416,7 +416,7 @@ class CUDAFunction(
         val kernelParameters = Pointer.to(kp: _*)
         // Start the GPU execution with the populated kernel parameters
         // XILI
-        GPUTimers.time(launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream),
+        GPUTimer.time(launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream),
           cuStream, "Execution")
         // XILI
 

@@ -54,7 +54,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
-    CPUTimer.accumuTime(copyGpuToCpu, "copyGpuToCpu")
+    copyGpuToCpu
     _arr = CPUTimer.accumuTime(getResultList, "getResultList")
     _arr
   } else {
@@ -146,8 +146,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       if (kpd.devPtr == null) {
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(kpd.sz)
         // XILI
-        GPUTimers.time(cuMemcpyHtoDAsync(devPtr, kpd.cpuPtr, kpd.sz, cuStream),
-          cuStream, "HtoD(copyCpuToGpu)")
+        GPUTimer.time(cuMemcpyHtoDAsync(devPtr, kpd.cpuPtr, kpd.sz, cuStream),
+          cuStream, "HtoD")
         // XILI
         cuCtxSynchronize()
         val gPtr = Pointer.to(devPtr)
@@ -208,9 +208,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
             (y, Pointer.to(y))
           }
         }
-        // XILI
-        GPUTimers.time(cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, cuStream),
-          cuStream, "DtoH")
+        // XILI`
+        GPUTimer.time(cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, cuStream), cuStream, "DtoH")
         // XILI
         KernelParameterDesc(cpuArr, cpuPtr, kpd.devPtr, kpd.gpuPtr, kpd.sz, kpd.symbol)
       } else {
@@ -218,8 +217,6 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       }
     })
     cuCtxSynchronize()
-
-
   }
 
   // Extract the getter method from the given object using reflection
@@ -369,8 +366,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         }
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(colDataSize)
         // XILI
-        GPUTimers.time (cuMemcpyHtoDAsync(devPtr, hPtr, colDataSize, cuStream),
-          cuStream, "HtoD(_listKernParmDesc)")
+        GPUTimer.time (cuMemcpyHtoDAsync(devPtr, hPtr, colDataSize, cuStream),
+          cuStream, "HtoD")
         // XILI
         val gPtr = Pointer.to(devPtr)
 
@@ -453,9 +450,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   // Extract the setter method from the given object using reflection
   private def setter[C](obj: Any, value: C, symbol: TermSymbol) = {
-    val mirror = CPUTimer.accumuTime(currentMirror, "getMirror")
-//    currentMirror.reflect(obj).reflectField(symbol).set(value)
-    CPUTimer.accumuTime(mirror.reflect(obj).reflectField(symbol).set(value), "reflect")
+    currentMirror.reflect(obj).reflectField(symbol).set(value)
   }
 
   def deserializeColumnValue(columnType: ColumnType, cpuArr: Array[_ >: Byte with Short with Int
@@ -538,19 +533,18 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       }
     } else {
       for (index <- 0 to numElements - 1) {
-        val retObj = CPUTimer.accumuTime(newCtor.newInstance().asInstanceOf[AnyRef], "retObj")
+        val retObj = newCtor.newInstance().asInstanceOf[AnyRef]
 //        val retObj = CPUTimer.accumuTime(instantiateClass(runtimeCls), "instantiateClass")
 //        val retObj2 = CPUTimer.accumuTime(ctorm, "instantiateClass2")
 
         (cols, listKernParmDesc, _outputArraySizes).zipped.foreach(
           (col, cdesc, outsize) => {
-            CPUTimer.accumuTime(
               setter(retObj,
-              CPUTimer.accumuTime(deserializeColumnValue(col.columnType, cdesc.cpuArr, index * outsize, outsize), "deserialize"),
-              cdesc.symbol),
-              "setter")
+              deserializeColumnValue(col.columnType, cdesc.cpuArr, index * outsize, outsize),
+              cdesc.symbol)
+
           })
-        CPUTimer.accumuTime(resultsArray(index) = retObj.asInstanceOf[T], "resultsArray")
+        resultsArray(index) = retObj.asInstanceOf[T]
       }
     }
     resultsArray
