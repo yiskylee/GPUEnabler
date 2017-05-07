@@ -43,8 +43,8 @@ private[gpuenabler] object ColumnPartitionSchema {
   // https://issues.scala-lang.org/browse/SI-6240 about reflection not being thread-safe before 2.11
   // http://docs.scala-lang.org/overviews/reflection/thread-safety.html
 
-  private[gpuenabler] val mirror: universe.Mirror =
-    universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+//  private[gpuenabler] val mirror: universe.Mirror =
+//    universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
 
   var onlyLoadableClassesSupported: Boolean = false
 
@@ -131,9 +131,12 @@ private[gpuenabler] object ColumnPartitionSchema {
       case c if c == classOf[Array[Float]] => Vector(new ColumnSchema(FLOAT_ARRAY_COLUMN))
       case c if c == classOf[Array[Double]] => Vector(new ColumnSchema(DOUBLE_ARRAY_COLUMN))
       // generic case for other objects
-      case _ =>
-        val clsSymbol = mirror.classSymbol(runtimeCls)
-        columnsFor(clsSymbol.typeSignature)
+//      case _ =>
+//        System.err.println("Do not support non primitive classes")
+//        System.exit(1)
+
+//        val clsSymbol = mirror.classSymbol(runtimeCls)
+//        columnsFor(clsSymbol.typeSignature)
     }
 
     new ColumnPartitionSchema(columns.toArray, runtimeCls)
@@ -176,26 +179,26 @@ private[gpuenabler] class ColumnPartitionSchema(
     columns.map(col => col.prettyAccessor)
   }
 
-  def getters: Array[Any => Any] = {
-    val mirror = ColumnPartitionSchema.mirror
-    columns.map { col =>
-      col.terms.foldLeft(identity[Any] _)((r, term) =>
-          ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
-    }
-  }
-
-  // the first argument is object, the second is value
-  def setters: Array[(Any, Any) => Unit] = {
-    assert(!isPrimitive)
-    val mirror = ColumnPartitionSchema.mirror
-    columns.map { col =>
-      val getOuter = col.terms.dropRight(1).foldLeft(identity[Any] _)((r, term) =>
-          ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
-
-      (obj: Any, value: Any) =>
-        mirror.reflect(getOuter(obj)).reflectField(col.terms.last).set(value)
-    }
-  }
+//  def getters: Array[Any => Any] = {
+//    val mirror = ColumnPartitionSchema.mirror
+//    columns.map { col =>
+//      col.terms.foldLeft(identity[Any] _)((r, term) =>
+//          ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
+//    }
+//  }
+//
+//  // the first argument is object, the second is value
+//  def setters: Array[(Any, Any) => Unit] = {
+//    assert(!isPrimitive)
+//    val mirror = ColumnPartitionSchema.mirror
+//    columns.map { col =>
+//      val getOuter = col.terms.dropRight(1).foldLeft(identity[Any] _)((r, term) =>
+//          ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
+//
+//      (obj: Any, value: Any) =>
+//        mirror.reflect(getOuter(obj)).reflectField(col.terms.last).set(value)
+//    }
+//  }
 
   private def writeObject(out: ObjectOutputStream): Unit = CUDAUtils.sparkUtils.tryOrIOException {
     out.writeObject(_columns)
@@ -230,12 +233,12 @@ private[gpuenabler] class ColumnSchema(
    * Chain of properties accessed starting from the original object. The first tuple argument is
    * the full name of the class containing the property and the second is property's name.
    */
-  def propertyChain: Vector[(String, String)] = {
-    val mirror = ColumnPartitionSchema.mirror
-    terms.map { term =>
-      (mirror.runtimeClass(term.owner.asClass).getName, term.name.toString)
-    }
-  }
+//  def propertyChain: Vector[(String, String)] = {
+//    val mirror = ColumnPartitionSchema.mirror
+//    terms.map { term =>
+//      (mirror.runtimeClass(term.owner.asClass).getName, term.name.toString)
+//    }
+//  }
 
   def prettyAccessor: String = {
     // val mirror = ColumnPartitionSchema.mirror
@@ -246,23 +249,23 @@ private[gpuenabler] class ColumnSchema(
     columnType.bytes * size
   }
 
-  private def writeObject(out: ObjectOutputStream): Unit = CUDAUtils.sparkUtils.tryOrIOException {
-    // TODO make it handle generic owner objects by passing full type information somehow
-    out.writeObject(_columnType)
-    out.writeObject(propertyChain)
-  }
+//  private def writeObject(out: ObjectOutputStream): Unit = CUDAUtils.sparkUtils.tryOrIOException {
+//    // TODO make it handle generic owner objects by passing full type information somehow
+//    out.writeObject(_columnType)
+//    out.writeObject(propertyChain)
+//  }
 
-  private def readObject(in: ObjectInputStream): Unit = CUDAUtils.sparkUtils.tryOrIOException {
-    val mirror = ColumnPartitionSchema.mirror
-    _columnType = in.readObject().asInstanceOf[ColumnType]
-    _terms =
-      in.readObject().asInstanceOf[Vector[(String, String)]].map { case (clsName, propName) =>
-        val cls = CUDAUtils.sparkUtils.classForName(clsName)
-        val typeSig = mirror.classSymbol(cls).typeSignature
-        typeSig.decl(universe.TermName(propName)).asTerm
-        // typeSig.declaration(universe.stringToTermName(propName)).asTerm // Scala_2.10
-      }
-  }
+//  private def readObject(in: ObjectInputStream): Unit = CUDAUtils.sparkUtils.tryOrIOException {
+//    val mirror = ColumnPartitionSchema.mirror
+//    _columnType = in.readObject().asInstanceOf[ColumnType]
+//    _terms =
+//      in.readObject().asInstanceOf[Vector[(String, String)]].map { case (clsName, propName) =>
+//        val cls = CUDAUtils.sparkUtils.classForName(clsName)
+//        val typeSig = mirror.classSymbol(cls).typeSignature
+//        typeSig.decl(universe.TermName(propName)).asTerm
+//        // typeSig.declaration(universe.stringToTermName(propName)).asTerm // Scala_2.10
+//      }
+//  }
 
 }
 

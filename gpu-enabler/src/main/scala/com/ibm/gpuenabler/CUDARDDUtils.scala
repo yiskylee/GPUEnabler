@@ -97,7 +97,6 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
        hyIter
       }
       case iter: Iterator[T] => {
-        // println("Converting Regular Iterator to hybridIterator")
         val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
         val hyIter = new HybridIterator[T](iter.toArray, inputColSchema,
           kernel.inputColumnsOrder, Some(parentBlockId))

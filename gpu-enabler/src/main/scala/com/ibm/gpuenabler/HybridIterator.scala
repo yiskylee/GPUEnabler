@@ -267,96 +267,96 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         }
 
         val (hPtr: Pointer, colDataSize: Int) = {
-          val mirror = ColumnPartitionSchema.mirror
-          val priv_getter = col.terms.foldLeft(identity[Any] _)((r, term) =>
-            ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
+//          val mirror = ColumnPartitionSchema.mirror
+//          val priv_getter = col.terms.foldLeft(identity[Any] _)((r, term) =>
+//            ((obj: Any) => mirror.reflect(obj).reflectField(term).get) compose r)
 
           var bufferOffset = 0
 
           col.columnType match {
-            case c if c == INT_COLUMN => {
-              val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => buffer.putInt(priv_getter(x).asInstanceOf[Int]))
-              (ptr, size)
-            }
-            case c if c == LONG_COLUMN => {
-              val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => buffer.putLong(priv_getter(x).asInstanceOf[Long]))
-              (ptr, size)
-            }
-            case c if c == SHORT_COLUMN => {
-              val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => buffer.putShort(priv_getter(x).asInstanceOf[Short]))
-              (ptr, size)
-            }
-            case c if c == BYTE_COLUMN => {
-              val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => buffer.put(priv_getter(x).asInstanceOf[Byte]))
-              (ptr, size)
-            }
-            case c if c == FLOAT_COLUMN => {
-              val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => buffer.putFloat(priv_getter(x).asInstanceOf[Float]))
-              (ptr, size)
-            }
-            case c if c == DOUBLE_COLUMN => {
-              val size = col.memoryUsage(inputArr.length).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => buffer.putDouble(priv_getter(x).asInstanceOf[Double]))
-              (ptr, size)
-            }
-            case c if c == INT_ARRAY_COLUMN => {
-              // retrieve the first element to determine the array size.
-              val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Int]].length
-              val size = col.memoryUsage(inputArr.length * arrLength).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => {
-                buffer.position(bufferOffset)
-                buffer.asIntBuffer().put(priv_getter(x).asInstanceOf[Array[Int]], 0, arrLength)
-                // bufferOffset += col.memoryUsage(arrLength).toInt
-                bufferOffset += arrLength * INT_COLUMN.bytes
-              })
-              (ptr, size)
-            }
-            case c if c == LONG_ARRAY_COLUMN => {
-              // retrieve the first element to determine the array size.
-              val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Long]].length
-              val size = col.memoryUsage(inputArr.length * arrLength).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => {
-                buffer.position(bufferOffset)
-                buffer.asLongBuffer().put(priv_getter(x).asInstanceOf[Array[Long]], 0, arrLength)
-                // bufferOffset += col.memoryUsage(arrLength).toInt
-                bufferOffset += arrLength * LONG_COLUMN.bytes
-              })
-              (ptr, size)
-            }
-            case c if c == FLOAT_ARRAY_COLUMN => {
-              // retrieve the first element to determine the array size.
-              val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Float]].length
-              val size = col.memoryUsage(inputArr.length * arrLength).toInt
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => {
-                buffer.position(bufferOffset)
-                buffer.asFloatBuffer().put(priv_getter(x).asInstanceOf[Array[Float]], 0, arrLength)
-                bufferOffset += arrLength * FLOAT_COLUMN.bytes
-                // bufferOffset += col.memoryUsage(arrLength).toInt
-              })
-              (ptr, size)
-            }
+//            case c if c == INT_COLUMN => {
+//              val size = col.memoryUsage(inputArr.length).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => buffer.putInt(priv_getter(x).asInstanceOf[Int]))
+//              (ptr, size)
+//            }
+//            case c if c == LONG_COLUMN => {
+//              val size = col.memoryUsage(inputArr.length).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => buffer.putLong(priv_getter(x).asInstanceOf[Long]))
+//              (ptr, size)
+//            }
+//            case c if c == SHORT_COLUMN => {
+//              val size = col.memoryUsage(inputArr.length).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => buffer.putShort(priv_getter(x).asInstanceOf[Short]))
+//              (ptr, size)
+//            }
+//            case c if c == BYTE_COLUMN => {
+//              val size = col.memoryUsage(inputArr.length).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => buffer.put(priv_getter(x).asInstanceOf[Byte]))
+//              (ptr, size)
+//            }
+//            case c if c == FLOAT_COLUMN => {
+//              val size = col.memoryUsage(inputArr.length).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => buffer.putFloat(priv_getter(x).asInstanceOf[Float]))
+//              (ptr, size)
+//            }
+//            case c if c == DOUBLE_COLUMN => {
+//              val size = col.memoryUsage(inputArr.length).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => buffer.putDouble(priv_getter(x).asInstanceOf[Double]))
+//              (ptr, size)
+//            }
+//            case c if c == INT_ARRAY_COLUMN => {
+//              // retrieve the first element to determine the array size.
+//              val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Int]].length
+//              val size = col.memoryUsage(inputArr.length * arrLength).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => {
+//                buffer.position(bufferOffset)
+//                buffer.asIntBuffer().put(priv_getter(x).asInstanceOf[Array[Int]], 0, arrLength)
+//                // bufferOffset += col.memoryUsage(arrLength).toInt
+//                bufferOffset += arrLength * INT_COLUMN.bytes
+//              })
+//              (ptr, size)
+//            }
+//            case c if c == LONG_ARRAY_COLUMN => {
+//              // retrieve the first element to determine the array size.
+//              val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Long]].length
+//              val size = col.memoryUsage(inputArr.length * arrLength).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => {
+//                buffer.position(bufferOffset)
+//                buffer.asLongBuffer().put(priv_getter(x).asInstanceOf[Array[Long]], 0, arrLength)
+//                // bufferOffset += col.memoryUsage(arrLength).toInt
+//                bufferOffset += arrLength * LONG_COLUMN.bytes
+//              })
+//              (ptr, size)
+//            }
+//            case c if c == FLOAT_ARRAY_COLUMN => {
+//              // retrieve the first element to determine the array size.
+//              val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Float]].length
+//              val size = col.memoryUsage(inputArr.length * arrLength).toInt
+//              val (ptr, buffer) = allocPinnedHeap(size)
+//              inputArr.foreach(x => {
+//                buffer.position(bufferOffset)
+//                buffer.asFloatBuffer().put(priv_getter(x).asInstanceOf[Array[Float]], 0, arrLength)
+//                bufferOffset += arrLength * FLOAT_COLUMN.bytes
+//                // bufferOffset += col.memoryUsage(arrLength).toInt
+//              })
+//              (ptr, size)
+//            }
             case c if c == DOUBLE_ARRAY_COLUMN => {
               // retrieve the first element to determine the array size.
-              val arrLength = priv_getter(inputArr.head).asInstanceOf[Array[Double]].length
+              val arrLength = inputArr.head.asInstanceOf[Array[Double]].length
               val size = col.memoryUsage(inputArr.length * arrLength).toInt
               val (ptr, buffer) = allocPinnedHeap(size)
               inputArr.foreach(x => {
                 buffer.position(bufferOffset)
-                buffer.asDoubleBuffer().put(priv_getter(x).asInstanceOf[Array[Double]], 0, arrLength)
+                buffer.asDoubleBuffer().put(x.asInstanceOf[Array[Double]], 0, arrLength)
                 bufferOffset += arrLength * DOUBLE_COLUMN.bytes
                 // bufferOffset += col.memoryUsage(arrLength).toInt
               })

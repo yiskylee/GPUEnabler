@@ -42,8 +42,11 @@ fi
 
 echo "Executing :: $MVN_CMD $MVN_ARGS -DskipTests $@ clean install "
 
-#$MVN_CMD $MVN_ARGS -DskipTests $@ clean install 2>&1 | tee ~/compile.txt
+if [[ $1 == "clean" ]]; then
+	$MVN_CMD $MVN_ARGS -DskipTests $@ clean install 2>&1 | tee ~/compile.txt
+else
 $MVN_CMD $MVN_ARGS -DskipTests $@ install -pl gpu-enabler 2>&1 | tee ~/compile.txt
+fi
 
 # ./utils/embed.sh -d  gpu-enabler_2.11-1.0.0.jar
 
