@@ -41,15 +41,14 @@ import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter
   */
 abstract class ExternalFunction extends Serializable {
   def compute[U: ClassTag, T: ClassTag](inp: HybridIterator[T],
-                                        columnSchemas: Seq[ColumnPartitionSchema],
                                         outputSize: Option[Int] = None,
                                         outputArraySizes: Seq[Int] = null,
                                         inputFreeVariables: Seq[Any] = null,
                                         blockId: Option[BlockId] = None): Iterator[U]
 
-  def inputColumnsOrder(): Seq[String]
+  def inputColumnsOrder(): Seq[DataSchema]
 
-  def outputColumnsOrder(): Seq[String]
+  def outputColumnsOrder(): Seq[DataSchema]
 }
 
 /**
@@ -100,62 +99,62 @@ abstract class ExternalFunction extends Serializable {
   *                            dimensions based on the number of partition items but for a single
   *                            stage.
   */
-class JavaCUDAFunction(val funcName: String,
-                       val _inputColumnsOrder: java.util.List[String] = null,
-                       val _outputColumnsOrder: java.util.List[String] = null,
-                       val resourceURL: URL,
-                       val constArgs: Seq[AnyVal] = Seq(),
-                       val stagesCount: Option[JFunction[Long, Integer]] = null,
-                       val dimensions: Option[JFunction2[Long, Integer, Tuple2[Integer, Integer]]] = null)
-  extends Serializable {
-
-  implicit def toScalaTuples(x: Tuple2[Integer, Integer]): Tuple2[Int, Int] = (x._1, x._2)
-
-  implicit def toScalaFunction(fun: JFunction[Long, Integer]):
-  Option[Long => Int] = if (fun != null)
-    Some(x => fun.call(x))
-  else None
-
-  implicit def toScalaFunction(fun: JFunction2[Long, Integer, Tuple2[Integer, Integer]]):
-  Option[(Long, Int) => Tuple2[Int, Int]] = if (fun != null)
-    Some((x, y) => fun.call(x, y))
-  else None
-
-  val stagesCountFn: Option[Long => Int] = stagesCount match {
-    case Some(fun: JFunction[Long, Integer]) => fun
-    case _ => None
-  }
-
-  val dimensionsFn: Option[(Long, Int) => Tuple2[Int, Int]] = dimensions match {
-    case Some(fun: JFunction2[Long, Integer, Tuple2[Integer, Integer]]) => fun
-    case _ => None
-  }
-
-  val cf = new CUDAFunction(funcName, _inputColumnsOrder.asScala, _outputColumnsOrder.asScala,
-    resourceURL, constArgs, stagesCountFn, dimensionsFn)
-
-  /* 
-   * 3 variants - call invocations
-   */
-  def this(funcName: String, _inputColumnsOrder: java.util.List[String],
-           _outputColumnsOrder: java.util.List[String],
-           resourceURL: URL) =
-    this(funcName, _inputColumnsOrder, _outputColumnsOrder,
-      resourceURL, Seq(), None, None)
-
-  def this(funcName: String, _inputColumnsOrder: java.util.List[String],
-           _outputColumnsOrder: java.util.List[String],
-           resourceURL: URL, constArgs: Seq[AnyVal]) =
-    this(funcName, _inputColumnsOrder, _outputColumnsOrder,
-      resourceURL, constArgs, None, None)
-
-  def this(funcName: String, _inputColumnsOrder: java.util.List[String],
-           _outputColumnsOrder: java.util.List[String],
-           resourceURL: URL, constArgs: Seq[AnyVal],
-           stagesCount: Option[JFunction[Long, Integer]]) =
-    this(funcName, _inputColumnsOrder, _outputColumnsOrder,
-      resourceURL, Seq(), stagesCount, None)
-}
+//class JavaCUDAFunction(val funcName: String,
+//                       val _inputColumnsOrder: java.util.List[String] = null,
+//                       val _outputColumnsOrder: java.util.List[String] = null,
+//                       val resourceURL: URL,
+//                       val constArgs: Seq[AnyVal] = Seq(),
+//                       val stagesCount: Option[JFunction[Long, Integer]] = null,
+//                       val dimensions: Option[JFunction2[Long, Integer, Tuple2[Integer, Integer]]] = null)
+//  extends Serializable {
+//
+//  implicit def toScalaTuples(x: Tuple2[Integer, Integer]): Tuple2[Int, Int] = (x._1, x._2)
+//
+//  implicit def toScalaFunction(fun: JFunction[Long, Integer]):
+//  Option[Long => Int] = if (fun != null)
+//    Some(x => fun.call(x))
+//  else None
+//
+//  implicit def toScalaFunction(fun: JFunction2[Long, Integer, Tuple2[Integer, Integer]]):
+//  Option[(Long, Int) => Tuple2[Int, Int]] = if (fun != null)
+//    Some((x, y) => fun.call(x, y))
+//  else None
+//
+//  val stagesCountFn: Option[Long => Int] = stagesCount match {
+//    case Some(fun: JFunction[Long, Integer]) => fun
+//    case _ => None
+//  }
+//
+//  val dimensionsFn: Option[(Long, Int) => Tuple2[Int, Int]] = dimensions match {
+//    case Some(fun: JFunction2[Long, Integer, Tuple2[Integer, Integer]]) => fun
+//    case _ => None
+//  }
+//
+//  val cf = new CUDAFunction(funcName, _inputColumnsOrder.asScala, _outputColumnsOrder.asScala,
+//    resourceURL, constArgs, stagesCountFn, dimensionsFn)
+//
+//  /*
+//   * 3 variants - call invocations
+//   */
+//  def this(funcName: String, _inputColumnsOrder: java.util.List[String],
+//           _outputColumnsOrder: java.util.List[String],
+//           resourceURL: URL) =
+//    this(funcName, _inputColumnsOrder, _outputColumnsOrder,
+//      resourceURL, Seq(), None, None)
+//
+//  def this(funcName: String, _inputColumnsOrder: java.util.List[String],
+//           _outputColumnsOrder: java.util.List[String],
+//           resourceURL: URL, constArgs: Seq[AnyVal]) =
+//    this(funcName, _inputColumnsOrder, _outputColumnsOrder,
+//      resourceURL, constArgs, None, None)
+//
+//  def this(funcName: String, _inputColumnsOrder: java.util.List[String],
+//           _outputColumnsOrder: java.util.List[String],
+//           resourceURL: URL, constArgs: Seq[AnyVal],
+//           stagesCount: Option[JFunction[Long, Integer]]) =
+//    this(funcName, _inputColumnsOrder, _outputColumnsOrder,
+//      resourceURL, Seq(), stagesCount, None)
+//}
 
 
 /**
@@ -199,9 +198,9 @@ class JavaCUDAFunction(val funcName: String,
   */
 class CUDAFunction(
                     val funcName: String,
-                    val _inputColumnsOrder: Seq[String] = null,
-                    val _outputColumnsOrder: Seq[String] = null,
-                    val resource: Any,
+                    val _inputColumnsOrder: Seq[DataSchema] = null,
+                    val _outputColumnsOrder: Seq[DataSchema] = null,
+                    val resourceURL: Any,
                     val constArgs: Seq[AnyVal] = Seq(),
                     val stagesCount: Option[Long => Int] = None,
                     val dimensions: Option[(Long, Int) => (Int, Int)] = None
@@ -212,15 +211,15 @@ class CUDAFunction(
   implicit def toScalaFunction(fun: JFunction2[Long, Int, Tuple2[Int, Int]]): (Long, Int) =>
     Tuple2[Int, Int] = (x, y) => fun.call(x, y)
 
-  def inputColumnsOrder: Seq[String] = _inputColumnsOrder
+  def inputColumnsOrder: Seq[DataSchema] = _inputColumnsOrder
 
-  def outputColumnsOrder: Seq[String] = _outputColumnsOrder
+  def outputColumnsOrder: Seq[DataSchema] = _outputColumnsOrder
 
   var _blockId: Option[BlockId] = Some(RDDBlockId(0, 0))
 
   //touch GPUSparkEnv for endpoint init
   GPUSparkEnv.get
-  val ptxmodule = resource match {
+  val ptxmodule = resourceURL match {
     case resourceURL: URL =>
       (resourceURL.toString, {
         val inputStream = resourceURL.openStream()
@@ -338,7 +337,6 @@ class CUDAFunction(
     * @return Returns an iterator of type U
     */
   def compute[U: ClassTag, T: ClassTag](inputHyIter: HybridIterator[T],
-                                        columnSchemas: Seq[ColumnPartitionSchema],
                                         outputSize: Option[Int] = None,
                                         outputArraySizes: Seq[Int] = null,
                                         inputFreeVariables: Seq[Any] = null,
@@ -353,8 +351,8 @@ class CUDAFunction(
 
     _blockId = blockId
 
-    val inputColumnSchema = columnSchemas(0)
-    val outputColumnSchema = columnSchemas(1)
+//    val inputColumnSchema = columnSchemas(0)
+//    val outputColumnSchema = columnSchemas(1)
 
     // Ensure the GPU is loaded with the same data in memory
     inputHyIter.copyCpuToGpu
@@ -372,7 +370,7 @@ class CUDAFunction(
     // size + input Args based on inputColumnOrder + constArgs
     var kp: List[Pointer] = List(gptr) ++ inputHyIter.listKernParmDesc.map(_.gpuPtr)
 
-    val outputHyIter = new HybridIterator[U](null, outputColumnSchema,
+    val outputHyIter = new HybridIterator[U](null,
       outputColumnsOrder, blockId,
       outputSize.getOrElse(inputHyIter.numElements), outputArraySizes = outputArraySizes)
 

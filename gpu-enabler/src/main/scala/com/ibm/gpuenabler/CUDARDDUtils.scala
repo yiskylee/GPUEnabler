@@ -81,8 +81,8 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  private val inputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[T], "schemaForT")
-  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
+//  private val inputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[T], "schemaForT")
+//  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
     // Use the block ID of this particular (rdd, partition)
@@ -98,120 +98,119 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       }
       case iter: Iterator[T] => {
         val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
-        val hyIter = new HybridIterator[T](iter.toArray, inputColSchema,
+        val hyIter = new HybridIterator[T](iter.toArray,
           kernel.inputColumnsOrder, Some(parentBlockId))
         hyIter
       }
     }, "inputHyIter")
 
-    val resultIter = CPUTimer.accumuTime(kernel.compute[U, T](inputHyIter,
-      Seq(inputColSchema, outputColSchema), None,
+    val resultIter = CPUTimer.accumuTime(kernel.compute[U, T](inputHyIter, None,
       outputArraySizes, inputFreeVariables, Some(blockId)), "compute")
     resultIter
   }
 }
 
-/**
-  * An RDD that convert partition's iterator to a format supported by GPU computation
-  * to every partition of the parent RDD.
-  */
-private[gpuenabler] class ConvertGPUPartitionsRDD[T: ClassTag](
-        prev: RDD[T],
-        preservesPartitioning: Boolean = false)
-  extends RDD[T](prev) {
-
-  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
-
-  override def getPartitions: Array[Partition] = firstParent[T].partitions
-
-  val inputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
-
-  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    // Use the block ID of this particular (rdd, partition)
-    val blockId = RDDBlockId(this.id, split.index)
-
-    val resultIter = firstParent[T].iterator(split, context) match {
-      case hyIter: HybridIterator[T] => {
-        hyIter
-      }
-      case iter: Iterator[T] => {
-        // println("Converting Regular Iterator to hybridIterator")
-        // val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
-        val hyIter = new HybridIterator[T](iter.toArray, inputColSchema,
-          null, Some(blockId))
-        hyIter
-      }
-    }
-
-    resultIter
-  }
-}
-
-/**
-  * Wrapper Function for Java APIs. It exposes 4 APIs
-  * mapExtFunc, reduceExtFunc, cacheGpu, unCacheGpu
-  *
-  * @param rdd Name of the Native code's function
-  * classTag need to be passed in to a scala API from java program only
-  * as a last argument.
-  *
-  * {{{
-  * import com.ibm.gpuenabler.JavaCUDARDD;
-  *
-  *      JavaRDD<Integer> inputData = sc.parallelize(range);
-  *      ClassTag<Integer> tag = scala.reflect.ClassTag$.MODULE$.apply(Integer.TYPE);
-  *      JavaCUDARDD<Integer> ci = new JavaCUDARDD(inputData.rdd(), tag);
-  * }}}
-  *
-  */
-class JavaCUDARDD[T: ClassTag](override val rdd: RDD[T])
-  extends JavaRDD[T](rdd) {
-
-  import CUDARDDImplicits._
-
-  override def wrapRDD(rdd: RDD[T]): JavaCUDARDD[T] = JavaCUDARDD.fromRDD(rdd)
-
-  implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
-
-  implicit def toScalaFunction[T, R](fun: JFunction2[T, T, R]): (T, T) => R = (x, y) => fun.call(x, y)
-
-  def mapExtFunc[U: ClassTag](f: JFunction[T, U],
-                                  extfunc: JavaCUDAFunction): JavaCUDARDD[U] =
-  {
-    def fn: (T) => U = (x: T) => f.call(x)
-    new JavaCUDARDD[U](rdd.mapExtFunc[U](fn, extfunc.cf,
-      null, null))
-  }
-
-  def mapExtFunc[U: ClassTag](fn: JFunction[T, U], extfunc: JavaCUDAFunction,
-                                  outputArraySizes: Seq[Int] = null,
-                                  inputFreeVariables: Seq[Any] = null): JavaCUDARDD[U] =
-  {    
-    new JavaCUDARDD[U](rdd.mapExtFunc(fn, extfunc.cf,
-      outputArraySizes, inputFreeVariables))
-  }
-
-  def reduceExtFunc(fn: JFunction2[T, T, T], extfunc: JavaCUDAFunction,
-                        outputArraySizes: Seq[Int] = null,
-                        inputFreeVariables: Seq[Any] = null): T = {    
-    rdd.reduceExtFunc(fn,extfunc.cf, outputArraySizes, inputFreeVariables)
-  }
-
-  def reduceExtFunc(fn: JFunction2[T, T, T], extfunc: JavaCUDAFunction): T = {    
-    rdd.reduceExtFunc(fn,extfunc.cf, null, null)
-  }
-
-  def cacheGpu() = wrapRDD(rdd.cacheGpu())
-
-  def unCacheGpu() = wrapRDD(rdd.unCacheGpu())
-}
-
-object JavaCUDARDD {
-  implicit def fromRDD[T: ClassTag](rdd: RDD[T]): JavaCUDARDD[T] =
-    new JavaCUDARDD[T](rdd)
-
-  implicit def toRDD[T](rdd: JavaCUDARDD[T]): RDD[T] = rdd.rdd
-}
+///**
+//  * An RDD that convert partition's iterator to a format supported by GPU computation
+//  * to every partition of the parent RDD.
+//  */
+//private[gpuenabler] class ConvertGPUPartitionsRDD[T: ClassTag](
+//        prev: RDD[T],
+//        preservesPartitioning: Boolean = false)
+//  extends RDD[T](prev) {
+//
+//  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
+//
+//  override def getPartitions: Array[Partition] = firstParent[T].partitions
+//
+//  val inputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
+//
+//  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+//    // Use the block ID of this particular (rdd, partition)
+//    val blockId = RDDBlockId(this.id, split.index)
+//
+//    val resultIter = firstParent[T].iterator(split, context) match {
+//      case hyIter: HybridIterator[T] => {
+//        hyIter
+//      }
+//      case iter: Iterator[T] => {
+//        // println("Converting Regular Iterator to hybridIterator")
+//        // val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
+//        val hyIter = new HybridIterator[T](iter.toArray, inputColSchema,
+//          null, Some(blockId))
+//        hyIter
+//      }
+//    }
+//
+//    resultIter
+//  }
+//}
+//
+///**
+//  * Wrapper Function for Java APIs. It exposes 4 APIs
+//  * mapExtFunc, reduceExtFunc, cacheGpu, unCacheGpu
+//  *
+//  * @param rdd Name of the Native code's function
+//  * classTag need to be passed in to a scala API from java program only
+//  * as a last argument.
+//  *
+//  * {{{
+//  * import com.ibm.gpuenabler.JavaCUDARDD;
+//  *
+//  *      JavaRDD<Integer> inputData = sc.parallelize(range);
+//  *      ClassTag<Integer> tag = scala.reflect.ClassTag$.MODULE$.apply(Integer.TYPE);
+//  *      JavaCUDARDD<Integer> ci = new JavaCUDARDD(inputData.rdd(), tag);
+//  * }}}
+//  *
+//  */
+//class JavaCUDARDD[T: ClassTag](override val rdd: RDD[T])
+//  extends JavaRDD[T](rdd) {
+//
+//  import CUDARDDImplicits._
+//
+//  override def wrapRDD(rdd: RDD[T]): JavaCUDARDD[T] = JavaCUDARDD.fromRDD(rdd)
+//
+//  implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
+//
+//  implicit def toScalaFunction[T, R](fun: JFunction2[T, T, R]): (T, T) => R = (x, y) => fun.call(x, y)
+//
+//  def mapExtFunc[U: ClassTag](f: JFunction[T, U],
+//                                  extfunc: JavaCUDAFunction): JavaCUDARDD[U] =
+//  {
+//    def fn: (T) => U = (x: T) => f.call(x)
+//    new JavaCUDARDD[U](rdd.mapExtFunc[U](fn, extfunc.cf,
+//      null, null))
+//  }
+//
+//  def mapExtFunc[U: ClassTag](fn: JFunction[T, U], extfunc: JavaCUDAFunction,
+//                                  outputArraySizes: Seq[Int] = null,
+//                                  inputFreeVariables: Seq[Any] = null): JavaCUDARDD[U] =
+//  {
+//    new JavaCUDARDD[U](rdd.mapExtFunc(fn, extfunc.cf,
+//      outputArraySizes, inputFreeVariables))
+//  }
+//
+//  def reduceExtFunc(fn: JFunction2[T, T, T], extfunc: JavaCUDAFunction,
+//                        outputArraySizes: Seq[Int] = null,
+//                        inputFreeVariables: Seq[Any] = null): T = {
+//    rdd.reduceExtFunc(fn,extfunc.cf, outputArraySizes, inputFreeVariables)
+//  }
+//
+//  def reduceExtFunc(fn: JFunction2[T, T, T], extfunc: JavaCUDAFunction): T = {
+//    rdd.reduceExtFunc(fn,extfunc.cf, null, null)
+//  }
+//
+//  def cacheGpu() = wrapRDD(rdd.cacheGpu())
+//
+//  def unCacheGpu() = wrapRDD(rdd.unCacheGpu())
+//}
+//
+//object JavaCUDARDD {
+//  implicit def fromRDD[T: ClassTag](rdd: RDD[T]): JavaCUDARDD[T] =
+//    new JavaCUDARDD[T](rdd)
+//
+//  implicit def toRDD[T](rdd: JavaCUDARDD[T]): RDD[T] = rdd.rdd
+//}
 
 /**
   * Adds additional functionality to existing RDD's which are
@@ -278,17 +277,17 @@ object CUDARDDImplicits {
         extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables)
     }
 
-    /**
-     * Return a new RDD by applying a function to all elements of this RDD.
-     */
-    def mapGpu[U: ClassTag](f: T => U): RDD[U] = {
-      import org.apache.spark.gpuenabler.CUDAUtils
-      val cleanF = CUDAUtils.cleanFn(sc, f) // sc.clean(f)
-      val cudaFunc = CUDACodeGenerator.generateForMap[U, T](cleanF).getOrElse(
-        throw new UnsupportedOperationException("Cannot generate GPU code")
-      )
-      new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter) => iter.map(cleanF), cudaFunc)
-    }
+//    /**
+//     * Return a new RDD by applying a function to all elements of this RDD.
+//     */
+//    def mapGpu[U: ClassTag](f: T => U): RDD[U] = {
+//      import org.apache.spark.gpuenabler.CUDAUtils
+//      val cleanF = CUDAUtils.cleanFn(sc, f) // sc.clean(f)
+//      val cudaFunc = CUDACodeGenerator.generateForMap[U, T](cleanF).getOrElse(
+//        throw new UnsupportedOperationException("Cannot generate GPU code")
+//      )
+//      new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter) => iter.map(cleanF), cudaFunc)
+//    }
 
 
     /**
@@ -321,7 +320,7 @@ object CUDARDDImplicits {
             data match {
               case col: HybridIterator[T] =>
                 if (col.numElements != 0) {
-                  val colIter = extfunc.compute[T, T](col, Seq(inputColSchema, outputColSchema),
+                  val colIter = extfunc.compute[T, T](col,
                     Some(1), outputArraySizes,
                     inputFreeVariables, None).asInstanceOf[HybridIterator[T]]
                   Some(colIter.next)
@@ -350,57 +349,57 @@ object CUDARDDImplicits {
      * Reduces the elements of this RDD using the specified commutative and
      * associative binary operator.
      */
-    def reduceGpu(f: (T, T) => T): T = {
-      import org.apache.spark.gpuenabler.CUDAUtils
-
-      val cleanF = CUDAUtils.cleanFn(sc, f) // sc.clean(f)
-
-      val cudaFunc = CUDACodeGenerator.generateForReduce[T](cleanF).getOrElse(
-        throw new UnsupportedOperationException("Cannot generate GPU code")
-      )
-
-      val inputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
-      val outputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
-
-      val reducePartition: (TaskContext, Iterator[T]) => Option[T] =
-        (ctx: TaskContext, data: Iterator[T]) => {
-          // Handle partitions with no data
-          if (data.length > 0) {
-            data match {
-              case col: HybridIterator[T] =>
-                if (col.numElements != 0) {
-                  val colIter = cudaFunc.compute[T, T](col, Seq(inputColSchema, outputColSchema),
-                    Some(1), null, null, None).asInstanceOf[HybridIterator[T]]
-                  Some(colIter.next)
-                } else {
-                  None
-                }
-            }
-          } else None
-        }
-
-      var jobResult: Option[T] = None
-      val mergeResult = (index: Int, taskResult: Option[T]) => {
-        if (taskResult.isDefined) {
-          jobResult = jobResult match {
-            case Some(value) => Some(f(value, taskResult.get))
-            case None => taskResult
-          }
-        }
-      }
-      sc.runJob(rdd, reducePartition, 0 until rdd.partitions.length, mergeResult)
-      jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
-    }
+//    def reduceGpu(f: (T, T) => T): T = {
+//      import org.apache.spark.gpuenabler.CUDAUtils
+//
+//      val cleanF = CUDAUtils.cleanFn(sc, f) // sc.clean(f)
+//
+//      val cudaFunc = CUDACodeGenerator.generateForReduce[T](cleanF).getOrElse(
+//        throw new UnsupportedOperationException("Cannot generate GPU code")
+//      )
+//
+//      val inputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
+//      val outputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
+//
+//      val reducePartition: (TaskContext, Iterator[T]) => Option[T] =
+//        (ctx: TaskContext, data: Iterator[T]) => {
+//          // Handle partitions with no data
+//          if (data.length > 0) {
+//            data match {
+//              case col: HybridIterator[T] =>
+//                if (col.numElements != 0) {
+//                  val colIter = cudaFunc.compute[T, T](col, Seq(inputColSchema, outputColSchema),
+//                    Some(1), null, null, None).asInstanceOf[HybridIterator[T]]
+//                  Some(colIter.next)
+//                } else {
+//                  None
+//                }
+//            }
+//          } else None
+//        }
+//
+//      var jobResult: Option[T] = None
+//      val mergeResult = (index: Int, taskResult: Option[T]) => {
+//        if (taskResult.isDefined) {
+//          jobResult = jobResult match {
+//            case Some(value) => Some(f(value, taskResult.get))
+//            case None => taskResult
+//          }
+//        }
+//      }
+//      sc.runJob(rdd, reducePartition, 0 until rdd.partitions.length, mergeResult)
+//      jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
+//    }
 
     /**
      * Return a new RDD by applying a function to all elements of this RDD.
      */
-    private[gpuenabler] def convert(x: PartitionFormat, unpersist: Boolean = true): RDD[T] = {
-      val convertedRDD = new ConvertGPUPartitionsRDD[T](rdd)
-      if (unpersist) {
-        rdd.unpersist(false)
-      }
-      convertedRDD
-    }
+//    private[gpuenabler] def convert(x: PartitionFormat, unpersist: Boolean = true): RDD[T] = {
+//      val convertedRDD = new ConvertGPUPartitionsRDD[T](rdd)
+//      if (unpersist) {
+//        rdd.unpersist(false)
+//      }
+//      convertedRDD
+//    }
   }
 }

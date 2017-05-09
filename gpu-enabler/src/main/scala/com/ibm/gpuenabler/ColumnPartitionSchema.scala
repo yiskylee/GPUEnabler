@@ -34,6 +34,9 @@ private[gpuenabler] abstract class PartitionFormat
 private[gpuenabler] case object ColumnFormat extends PartitionFormat
 
 
+case class DataSchema(val name: String, val dataType: String, val length: Int)
+
+
 private[gpuenabler] object ColumnPartitionSchema {
 
   // Since we are creating a runtime mirror using the class loader of current thread,
