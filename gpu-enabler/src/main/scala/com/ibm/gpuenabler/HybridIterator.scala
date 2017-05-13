@@ -33,6 +33,7 @@ import scala.reflect.runtime._
 import scala.reflect.runtime.{universe => ru}
 import scala.reflect.runtime.universe.TermSymbol
 import scala.collection.mutable.HashMap
+import breeze.linalg.DenseVector
 
 // scalastyle:off no.finalize
 private[gpuenabler] case class KernelParameterDesc(
@@ -249,6 +250,15 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
               inputArr.foreach(x => {
                 buffer.position(bufferOffset)
                 buffer.asDoubleBuffer().put(x.asInstanceOf[Array[Double]], 0, length)
+                bufferOffset += length * 8
+                (ptr, size)
+              })
+            case DataSchema(name, "DenseVector[Double]", length) =>
+              val size: Int = inputArr.length * length * 8
+              val (ptr, buffer) = allocPinnedHeap(size)
+              inputArr.foreach(x => {
+                buffer.position(bufferOffset)
+                buffer.asDoubleBuffer().put(x.asInstanceOf[DenseVector[Double]].data, 0, length)
                 bufferOffset += length * 8
               })
               (ptr, size)

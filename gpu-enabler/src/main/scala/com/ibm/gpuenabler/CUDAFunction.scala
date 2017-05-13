@@ -35,6 +35,8 @@ import scala.language.implicitConversions
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
 import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
 
+import breeze.linalg.DenseVector
+
 
 /**
   * An abstract class to represent a ''User Defined function'' from a Native GPU program.
@@ -298,6 +300,13 @@ class CUDAFunction(
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(FLOAT_COLUMN.bytes)
         cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), FLOAT_COLUMN.bytes, cuStream)
         (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), FLOAT_COLUMN.bytes)
+      }
+      case h if h.isInstanceOf[DenseVector[Double]] => {
+        val arr = h.asInstanceOf[DenseVector[Double]].data
+        val sz = arr.length * DOUBLE_COLUMN.bytes
+        val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
+        cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), sz, cuStream)
+        (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), sz)
       }
       case h if h.isInstanceOf[Array[Double]] => {
         val arr = h.asInstanceOf[Array[Double]]

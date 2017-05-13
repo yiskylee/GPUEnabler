@@ -104,8 +104,8 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       }
     }, "inputHyIter")
 
-    val resultIter = CPUTimer.accumuTime(kernel.compute[U, T](inputHyIter, None,
-      outputArraySizes, inputFreeVariables, Some(blockId)), "compute")
+    val resultIter = kernel.compute[U, T](inputHyIter, None,
+      outputArraySizes, inputFreeVariables, Some(blockId))
     resultIter
   }
 }
