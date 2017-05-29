@@ -8,12 +8,23 @@ import scala.collection.mutable.ListBuffer
 class Timer {
   protected var timesAccum = new mutable.HashMap[String, Double]
   protected var timesPerIter = new mutable.HashMap[String, ListBuffer[Double]]
+  protected var timesStartEnd = new mutable.HashMap[String, ListBuffer[(Double, Double)]]
 
   def printIterTime(): Unit = {
     for ((name, timeList) <- timesPerIter) {
-      print(name)
+      print("Timer: " + name)
       for (time <- timeList) {
         print(", " + time)
+      }
+      println
+    }
+  }
+
+  def printStartEndTime(): Unit = {
+    for ((name, timeList) <- timesStartEnd) {
+      print("StartEndTimer: " + name)
+      for (startEnd <- timeList) {
+        print(", " + startEnd._1 + ", " + startEnd._2)
       }
       println
     }
@@ -26,7 +37,7 @@ object CPUTimer extends Timer {
     val result = block
     val t1 = System.nanoTime()
     val t = (t1 - t0) / 1e6
-    println(name + ": " + f"$t%.5f ms")
+    println("Timer: " + name + ": " + f"$t%.5f ms")
     result
   }
 
@@ -34,24 +45,42 @@ object CPUTimer extends Timer {
   // Then reset the accumulated time table for the next iteration
   def restart(): Unit = {
     for ((name, time) <- timesAccum) {
-      if (!timesPerIter.contains(name))
+      if (!timesPerIter.contains(name)) {
         timesPerIter(name) = new ListBuffer[Double]
+      }
       timesPerIter(name) += time
       timesAccum(name) = 0.0
     }
   }
 
+
+  // Function to record starting and ending time of every event timed by
+  // accumuTimer
+  def recordStartAndEnd(startNano: Long, endNano: Long, name: String): Unit = {
+    val end = System.currentTimeMillis.toDouble
+    val elapsedTime = (endNano - startNano) / 1e6
+    val start = end - elapsedTime
+    if (!timesStartEnd.contains(name)) {
+      timesStartEnd(name) = new ListBuffer[(Double, Double)]
+    }
+    timesStartEnd(name) += ((start, end))
+  }
+
+
   def accumuTime[R](block: => R, name: String): R = {
     val t0 = System.nanoTime()
     val result = block
     val t1 = System.nanoTime()
+    recordStartAndEnd(t0, t1, name)
     val t = (t1 - t0) / 1e6
-    if (timesAccum.contains(name))
+    if (timesAccum.contains(name)) {
       timesAccum(name) += t
-    else
+    } else {
       timesAccum(name) = t
+    }
     result
   }
+}
 //  def sum: Double = {
 //    var totalTime: Double = 0
 //    for ((name, time) <- timesAccum) {
@@ -67,7 +96,7 @@ object CPUTimer extends Timer {
 //    println("Total CPU Time: " + f"$totalTime%.5f ms")
 //  }
 
-}
+
 
 object GPUTimer extends Timer {
 
@@ -165,5 +194,4 @@ object GPUTimer extends Timer {
     val totalTime = sum
     println("Total GPU Time: " + f"$totalTime%.5f ms")
   }
-
 }

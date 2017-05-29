@@ -211,11 +211,6 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     cuCtxSynchronize()
   }
 
-  // Extract the getter method from the given object using reflection
-  private def getter[C](obj: Any, symbol: TermSymbol): C = {
-    currentMirror.reflect(obj).reflectField(symbol).get.asInstanceOf[C]
-  }
-
   // Allocate Memory from Off-heap Pinned Memory and returns
   // the pointer & buffer address pointing to it
   private def allocPinnedHeap(size: Long) = {
@@ -308,20 +303,6 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     kernParamDesc
   } else {
     null
-  }
-
-  // Use reflection to instantiate object without calling constructor
-  private def instantiateClass(cls: Class[_]): AnyRef = {
-    val rf = sun.reflect.ReflectionFactory.getReflectionFactory
-    val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
-    val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
-    val obj = newCtor.newInstance().asInstanceOf[AnyRef]
-    obj
-  }
-
-  // Extract the setter method from the given object using reflection
-  private def setter[C](obj: Any, value: C, symbol: TermSymbol) = {
-    currentMirror.reflect(obj).reflectField(symbol).set(value)
   }
 
   def deserializeColumnValue(columnType: String, cpuArr: Array[_ >: Byte with Short with Int

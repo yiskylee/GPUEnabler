@@ -301,7 +301,7 @@ class CUDAFunction(
         cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), FLOAT_COLUMN.bytes, cuStream)
         (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), FLOAT_COLUMN.bytes)
       }
-      case h if h.isInstanceOf[DenseVector[Double]] => {
+      case h if h.isInstanceOf[DenseVector[_]] => {
         val arr = h.asInstanceOf[DenseVector[Double]].data
         val sz = arr.length * DOUBLE_COLUMN.bytes
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
