@@ -33,6 +33,7 @@ import scala.reflect.ClassTag
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
+
 import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
 import org.apache.spark.mllib.util.{CPUTimer, GPUTimer}
 

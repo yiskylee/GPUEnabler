@@ -18,11 +18,13 @@
 package com.ibm.gpuenabler
 
 import java.nio.ByteOrder
+import java.io.{PrintWriter, StringWriter}
 
 import jcuda.driver.JCudaDriver._
 import jcuda.driver.{CUdeviceptr, CUresult, CUstream}
 import jcuda.runtime.{JCuda, cudaStream_t}
 import jcuda.{CudaException, Pointer}
+
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.RDDBlockId
 import scala.collection.mutable.ArrayBuffer
@@ -32,6 +34,7 @@ import scala.reflect.runtime._
 import scala.reflect.runtime.{universe => ru}
 import scala.reflect.runtime.universe.TermSymbol
 import scala.collection.mutable.HashMap
+
 import breeze.linalg.DenseVector
 import org.apache.spark.mllib.util.{CPUTimer, GPUTimer}
 
@@ -333,10 +336,18 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   }
 
   def getResultList: Array[T] = {
+    // XILI
+//    val sw = new StringWriter
+//    new Exception("stacktrace").printStackTrace(new PrintWriter(sw))
+//    // scalastyle:off
+//    println(sw.toString)
+//    // scalastyle:on
+    // XILI
     val resultsArray = new Array[T](numElements)
     for (index <- 0 to numElements - 1) {
-      resultsArray(index) = (deserializeColumnValue(columnsOrder(0).dataType, listKernParmDesc(0).cpuArr, index),
-                             deserializeColumnValue(columnsOrder(1).dataType, listKernParmDesc(1).cpuArr, index)).asInstanceOf[T]
+      resultsArray(index) =
+        (deserializeColumnValue(columnsOrder(0).dataType, listKernParmDesc(0).cpuArr, index),
+         deserializeColumnValue(columnsOrder(1).dataType, listKernParmDesc(1).cpuArr, index)).asInstanceOf[T]
     }
     resultsArray
   }

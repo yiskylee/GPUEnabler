@@ -17,15 +17,13 @@
 
 package com.ibm.gpuenabler
 
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.rdd._
 import org.apache.spark.storage.RDDBlockId
-import org.apache.spark.{Partition, TaskContext, _}
-import org.apache.spark.mllib.util.CPUTimer
+import org.apache.spark.{Partition, TaskContext, SparkContext}
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
 
 private[gpuenabler] case class Key(val rdd : RDD[Int], key : RDDBlockId)
 

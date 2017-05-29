@@ -49,4 +49,3 @@ $MVN_CMD $MVN_ARGS -DskipTests $@ install -pl gpu-enabler 2>&1 | tee ~/compile.t
 fi
 
 # ./utils/embed.sh -d  gpu-enabler_2.11-1.0.0.jar
-

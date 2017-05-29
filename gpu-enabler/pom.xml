@@ -123,6 +123,11 @@
   </pluginRepositories>
 
   <dependencies>
+		<dependency>
+		  <groupId>org.scalanlp</groupId>
+		  <artifactId>breeze_${scala.binary.version}</artifactId>
+		  <version>0.13.1</version>
+		</dependency>
     <dependency>
       <groupId>org.mystic</groupId>
       <artifactId>mavenized-jcuda</artifactId>
