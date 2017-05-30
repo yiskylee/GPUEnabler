@@ -20,6 +20,7 @@ package com.ibm.gpuenabler
 import org.apache.spark.rdd._
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.{Partition, TaskContext, _}
+import org.apache.spark.mllib.util.CPUTimer
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag

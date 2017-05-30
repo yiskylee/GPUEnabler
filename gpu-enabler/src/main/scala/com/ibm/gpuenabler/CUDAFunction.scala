@@ -22,8 +22,8 @@ import java.net.URL
 
 import jcuda.Pointer
 import jcuda.driver.JCudaDriver._
-import jcuda.driver._
-import jcuda.runtime.{JCuda, cudaEvent_t, cudaStream_t}
+import jcuda.driver.{CUdeviceptr, CUfunction, CUstream}
+import jcuda.runtime.{JCuda, cudaStream_t}
 import org.apache.commons.io.IOUtils
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, RDDBlockId}
@@ -34,6 +34,7 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
 import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
+import org.apache.spark.mllib.util.{CPUTimer, GPUTimer}
 
 import breeze.linalg.DenseVector
 

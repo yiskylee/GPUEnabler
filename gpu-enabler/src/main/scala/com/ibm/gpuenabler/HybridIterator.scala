@@ -25,7 +25,6 @@ import jcuda.runtime.{JCuda, cudaStream_t}
 import jcuda.{CudaException, Pointer}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.RDDBlockId
-
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -34,6 +33,7 @@ import scala.reflect.runtime.{universe => ru}
 import scala.reflect.runtime.universe.TermSymbol
 import scala.collection.mutable.HashMap
 import breeze.linalg.DenseVector
+import org.apache.spark.mllib.util.{CPUTimer, GPUTimer}
 
 // scalastyle:off no.finalize
 private[gpuenabler] case class KernelParameterDesc(
