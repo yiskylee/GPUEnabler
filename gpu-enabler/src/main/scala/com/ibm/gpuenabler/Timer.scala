@@ -39,6 +39,19 @@ object CPUIterTimer {
     result
   }
 
+  def printIterTime(): Unit = {
+    val sortedNames = timerList(0).toSeq.sortBy(_._1).map(_._1)
+    sortedNames.foreach(name => print(name + ", "))
+    println()
+    for (timer <- timerList) {
+      for (name <- sortedNames) {
+        val l = timer(name)
+        l.foreach ( startEnd => print(startEnd._1 + " " + startEnd._2) )
+      }
+      print(", ")
+    }
+    println()
+  }
 }
 
 
