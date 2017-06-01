@@ -36,7 +36,6 @@ import scala.reflect.runtime.universe.TermSymbol
 import scala.collection.mutable.HashMap
 
 import breeze.linalg.DenseVector
-import org.apache.spark.mllib.util.{CPUTimer, GPUTimer}
 
 // scalastyle:off no.finalize
 private[gpuenabler] case class KernelParameterDesc(
@@ -58,7 +57,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
     copyGpuToCpu
-    _arr = CPUTimer.accumuTime(getResultList, "getResultList")
+    _arr = CPUIterTimer.time(getResultList, "getResultList")
     _arr
   } else {
     _arr
