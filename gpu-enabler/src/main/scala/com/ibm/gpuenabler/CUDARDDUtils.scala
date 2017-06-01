@@ -84,15 +84,15 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 //  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
-    CPUTimer.accumuTime({
+    CPUIterTimer.time({
     // Use the block ID of this particular (rdd, partition)
-    val blockId = CPUTimer.accumuTime(RDDBlockId(this.id, split.index), "blockId")
+    val blockId = CPUIterTimer.time(RDDBlockId(this.id, split.index), "blockId")
 
     // Handle empty partitions.
-    CPUTimer.accumuTime(if (firstParent[T].iterator(split, context).length <= 0)
+      CPUIterTimer.time(if (firstParent[T].iterator(split, context).length <= 0)
       return new Array[U](0).toIterator, "emptyPartitions")
 
-    val inputHyIter = CPUTimer.accumuTime(firstParent[T].iterator(split, context) match {
+    val inputHyIter = CPUIterTimer.time(firstParent[T].iterator(split, context) match {
       case hyIter: HybridIterator[T] => {
        hyIter
       }
@@ -104,7 +104,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       }
     }, "inputHyIter")
 
-    val resultIter = CPUTimer.accumuTime(kernel.compute[U, T](inputHyIter, None,
+    val resultIter = CPUIterTimer.time(kernel.compute[U, T](inputHyIter, None,
       outputArraySizes, inputFreeVariables, Some(blockId)), "kernelCompute")
     resultIter
   }, "compute")
