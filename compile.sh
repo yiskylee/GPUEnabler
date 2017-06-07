@@ -43,9 +43,19 @@ fi
 echo "Executing :: $MVN_CMD $MVN_ARGS -DskipTests $@ clean install "
 
 if [[ $1 == "clean" ]]; then
-	$MVN_CMD $MVN_ARGS -DskipTests $@ clean install 2>&1 | tee ~/compile.txt
+	$MVN_CMD $MVN_ARGS -DskipTests $@ clean install 2>&1
 else
-$MVN_CMD $MVN_ARGS -DskipTests $@ install -pl gpu-enabler 2>&1 | tee ~/compile.txt
+$MVN_CMD $MVN_ARGS -DskipTests $@ install -pl gpu-enabler 2>&1
 fi
+
+if [[ $? -eq 0 ]]; then
+	echo "Successfully build gpu-enabler, now building Spark assembly"
+	cd ${SPARK_HOME}
+	./build/mvn -pl :spark-assembly_2.11 -DskipTests source:jar install
+	cd -
+else
+	echo "Failed to build gpu-enabler, exiting"
+fi
+	
 
 # ./utils/embed.sh -d  gpu-enabler_2.11-1.0.0.jar
