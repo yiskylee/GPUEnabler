@@ -249,10 +249,6 @@ class CUDAFunction(
     //    val sw = new StringWriter
     //    new Exception("stacktrace").printStackTrace(new PrintWriter(sw))
     //    println(sw.toString)
-
-
-
-
     //    // XILI
     cuLaunchKernel(function,
       gpuGridSize, 1, 1, // how many blocks

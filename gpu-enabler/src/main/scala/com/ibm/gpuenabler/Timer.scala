@@ -25,17 +25,17 @@ object CPUIterTimer {
   }
 
   def time[R](block: => R, name: String): R = {
-    // Use nanoTime() for accurate measurement of duration
-    val t0 = System.nanoTime()
-    val result = block
-    val t1 = System.nanoTime()
-    // use currentTimeMills to get the correct time stamp
-    val end = System.currentTimeMillis.toDouble
-    val elapsedTime = (t1 - t0) / 1e6
-    val start = end - elapsedTime
-
     if (running) {
       // Only record time if the CPUIterTimer is started by the user
+
+      // Use nanoTime() for accurate measurement of duration
+      val t0 = System.nanoTime()
+      val result = block
+      val t1 = System.nanoTime()
+      // use currentTimeMills to get the correct time stamp
+      val end = System.currentTimeMillis.toDouble
+      val elapsedTime = (t1 - t0) / 1e6
+      val start = end - elapsedTime
       val curMap = timerList(iterNum)
       if (curMap.contains(name)) {
         // If the event has already been recorded in this iteration
@@ -46,7 +46,18 @@ object CPUIterTimer {
         curMap(name) = new ListBuffer[(Double, Double)]
         curMap(name) += ((start, end))
       }
+      result
+    } else {
+      // When the timer is not running, just run the code blck
+      block
     }
+  }
+
+  def accumuTime[R](block: => R, name: String): R = {
+    val t0 = System.nanoTime()
+    val result = block
+    val t1 = System.nanoTime()
+    val elapsedTime = (t1 - t0) / 1e6
     result
   }
 
