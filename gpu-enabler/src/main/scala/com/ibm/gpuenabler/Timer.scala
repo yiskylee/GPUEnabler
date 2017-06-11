@@ -1,14 +1,23 @@
 package com.ibm.gpuenabler
 
 import jcuda.driver.{CUevent, CUstream, JCudaDriver}
+
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.ListBuffer
+import scala.util.Random
 
 object CPUIterTimer {
-  // Each element in the list is a timer corresponding to one iteration
+  // Each element in the list is a timer corresponding to one iteration,
+  // each timer contains the name and all (start, end) pairs
   val timerList = new ListBuffer[HashMap[String, ListBuffer[(Double, Double)]]]
+  // Each element in the list is a timer corresponding to one iteration
+  // each timer contains the name and elapsed time
+  val accumuTimerList = new ListBuffer[HashMap[String, Double]]
   var iterNum = -1
   var running = false
+
+  // Under which can we merge two durations
+  var mergeCondition = 0.05
 
   def start(): Unit = {
     running = true
@@ -22,12 +31,12 @@ object CPUIterTimer {
     // This marks the end of an iteration
     iterNum += 1
     timerList += new HashMap[String, ListBuffer[(Double, Double)]]
+    accumuTimerList += new HashMap[String, Double]
   }
 
   def time[R](block: => R, name: String): R = {
     if (running) {
       // Only record time if the CPUIterTimer is started by the user
-
       // Use nanoTime() for accurate measurement of duration
       val t0 = System.nanoTime()
       val result = block
@@ -38,7 +47,7 @@ object CPUIterTimer {
       val start = end - elapsedTime
       val curMap = timerList(iterNum)
       if (curMap.contains(name)) {
-        // If the event has already been recorded in this iteration
+        // If the event has already been recorded in this very iteration
         curMap(name) += ((start, end))
       } else {
         // If this is the first time the event happens in this iteration
@@ -54,36 +63,125 @@ object CPUIterTimer {
   }
 
   def accumuTime[R](block: => R, name: String): R = {
-    val t0 = System.nanoTime()
-    val result = block
-    val t1 = System.nanoTime()
-    val elapsedTime = (t1 - t0) / 1e6
-    result
+    if (running) {
+      val t0 = System.nanoTime()
+      val result = block
+      val t1 = System.nanoTime()
+      val elapsedTime = (t1 - t0) / 1e6
+      val curMap = accumuTimerList(iterNum)
+      if (curMap.contains(name)) {
+        // If the event has already been recorded in this very iteration
+        curMap(name) += elapsedTime
+      } else {
+        curMap(name) = elapsedTime
+      }
+      result
+    } else {
+      block
+    }
+  }
+
+
+  def mergeStartEndList(startEndList: ListBuffer[(Double, Double)]) = {
+    val mergedList = new ListBuffer[(Double, Double)]
+    // Initialize the start and end time of the last event
+    // if n+1 th event's start time is no more than 1 ms later
+    // than the last event's end time, we consider
+    // the two events are very close, thus just merge them and
+    // only record the start end for one event
+    var lastStart = 0.0
+    var lastEnd = 0.0
+    for ((startEnd, i) <- startEndList.zipWithIndex) {
+
+      var start = startEnd._1
+      val end = startEnd._2
+
+      if (i == 0) {
+        lastStart = start
+        lastEnd = end
+      } else {
+        if ((start - lastEnd) / (end - start) <= mergeCondition) {
+          // If the current duration can be merged to the last one
+          start = lastStart
+        } else {
+          // If the current duration cannot be merged
+          // then we need to add previous duration to the list
+          mergedList += ((lastStart, lastEnd))
+        }
+      }
+      // No matter if we can merge or not, always update lastStart and
+      // lastEnd with the current start and end
+      lastStart = start
+      lastEnd = end
+    }
+    // Make sure to include the last duration
+    mergedList += ((lastStart, lastEnd))
+  }
+
+  def takeSample[T](a: ListBuffer[T], n: Int, seed: Long) = {
+    val rnd = new Random(seed)
+    ListBuffer.fill(n)(a(rnd.nextInt(a.length)))
   }
 
   def printIterTime(): Unit = {
-    print("StartEndTimer: ")
-    val sortedNames = timerList(0).toSeq.sortBy(_._1).map(_._1)
-    for ((name, index) <- sortedNames.zipWithIndex) {
-      if (index == sortedNames.length - 1)
-        print(name + "\n")
-      else
-        print(name + ",")
-    }
-    for (timer <- timerList) {
+    if (!timerList(0).isEmpty) {
       print("StartEndTimer: ")
-      for ((name, i) <- sortedNames.zipWithIndex) {
-        val startEndList = timer(name)
-        for ((startEnd, j) <- startEndList.zipWithIndex) {
-          if (j == startEndList.length - 1 && i != sortedNames.length - 1)
-            print(startEnd._1 + "|" + startEnd._2 + ",")
-          else if (j == startEndList.length - 1 && i == sortedNames.length - 1) {
-            print(startEnd._1 + "|" + startEnd._2 + "\n")
-          } else {
-            print(startEnd._1 + "|" + startEnd._2 + "|")
+      val sortedNames = timerList(0).toSeq.sortBy(_._1).map(_._1)
+      for ((name, index) <- sortedNames.zipWithIndex) {
+        if (index == sortedNames.length - 1)
+          print(name + "\n")
+        else
+          print(name + ",")
+      }
+      for (timer <- timerList) {
+        print("StartEndTimer: ")
+        for ((name, i) <- sortedNames.zipWithIndex) {
+
+          var startEndList = timer(name)
+          if (startEndList.length > 10) {
+            // When there are too many time durations, randomly sample 10
+            // for faster plotting
+            startEndList = takeSample(startEndList, 10, System.currentTimeMillis)
+          }
+          for ((startEnd, j) <- startEndList.zipWithIndex) {
+            val start = startEnd._1
+            val end = startEnd._2
+            if (j == startEndList.length - 1 && i != sortedNames.length - 1)
+              print(start + "|" + end + ",")
+            else if (j == startEndList.length - 1 && i == sortedNames.length - 1) {
+              print(start + "|" + end + "\n")
+            } else {
+              print(start + "|" + end + "|")
+            }
           }
         }
       }
+    } else {
+      println("There is no timer")
+    }
+  }
+
+  def printIterAccumuTime(): Unit = {
+    if (!accumuTimerList(0).isEmpty) {
+      print("AccumuTimer: ")
+      val sortedNames = accumuTimerList(0).toSeq.sortBy(_._1).map(_._1)
+      for ((name, index) <- sortedNames.zipWithIndex) {
+        if (index == sortedNames.length - 1)
+          print(name + "\n")
+        else
+          print(name + ",")
+      }
+      for (timer <- accumuTimerList) {
+        print("AccumuTimer: ")
+        for ((name, i) <- sortedNames.zipWithIndex) {
+          if (i != sortedNames.length - 1)
+            print(timer(name) + ",")
+          else
+            print(timer(name) + "\n")
+        }
+      }
+    } else {
+      println("There is no accumuTimer")
     }
   }
 }
