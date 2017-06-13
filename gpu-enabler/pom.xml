@@ -32,88 +32,6 @@
     </repository>
   </repositories>
 
-    <!--Set of auto detected profiles for different OS family/architecture-->
-    <profiles>
-        <profile>
-            <id>windows-x86_64</id>
-            <activation>
-                <os>
-                    <family>windows</family>
-                    <arch>amd64</arch>
-                </os>
-            </activation>
-            <properties>
-                <jcuda.lib.ext>dll</jcuda.lib.ext>
-                <jcuda.lib.suffix>windows-x86_64</jcuda.lib.suffix>
-            </properties>
-        </profile>
-        <profile>
-            <id>windows-x86</id>
-            <activation>
-                <os>
-                    <family>windows</family>
-                    <arch>x86</arch>
-                </os>
-            </activation>
-            <properties>
-                <jcuda.lib.ext>dll</jcuda.lib.ext>
-                <jcuda.lib.suffix>windows-x86</jcuda.lib.suffix>            
-            </properties>
-        </profile>
-        <profile>
-            <id>unix-x86_64</id>
-            <activation>
-                <os>
-                    <family>unix</family>
-                    <arch>amd64</arch>
-                </os>
-            </activation>
-            <properties>
-                <jcuda.lib.ext>so</jcuda.lib.ext>
-                <jcuda.lib.suffix>linux-x86_64</jcuda.lib.suffix>            
-            </properties>
-        </profile>            
-        <profile>
-            <id>ppc64</id>
-            <activation>
-                <os>
-                    <family>unix</family>
-                    <arch>ppc64</arch>
-                </os>
-            </activation>
-            <properties>
-                <jcuda.lib.ext>so</jcuda.lib.ext>
-                <jcuda.lib.suffix>linux-ppc_64</jcuda.lib.suffix>              
-            </properties>
-        </profile>
-        <profile>
-            <id>ppc64le</id>
-            <activation>
-                <os>
-                    <family>unix</family>
-                    <arch>ppc64le</arch>
-                </os>
-            </activation>
-            <properties>
-                <jcuda.lib.ext>so</jcuda.lib.ext>
-                <jcuda.lib.suffix>linux-ppc_64</jcuda.lib.suffix>  
-            </properties>
-        </profile>
-        <profile>
-            <id>apple-x86_64</id>
-            <activation>
-                <os>
-                    <family>mac</family>
-                    <arch>x86_64</arch>
-                </os>
-            </activation>
-            <properties>
-                <jcuda.lib.ext>dylib</jcuda.lib.ext>
-                <jcuda.lib.suffix>apple-x86_64</jcuda.lib.suffix>              
-            </properties>
-        </profile>
-    </profiles>
-
   <pluginRepositories>
     <pluginRepository>
       <id>scala-tools.org</id>
@@ -128,11 +46,6 @@
 		  <artifactId>breeze_${scala.binary.version}</artifactId>
 		  <version>0.13.1</version>
 		</dependency>
-    <dependency>
-      <groupId>org.mystic</groupId>
-      <artifactId>mavenized-jcuda</artifactId>
-      <version>0.1.2</version>
-    </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>

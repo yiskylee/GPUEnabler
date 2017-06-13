@@ -21,6 +21,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.rdd._
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.{Partition, TaskContext, SparkContext}
+import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag

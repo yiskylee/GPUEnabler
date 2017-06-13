@@ -35,7 +35,8 @@ object CPUIterTimer {
   }
 
   def time[R](block: => R, name: String): R = {
-    if (running) {
+    val newName = name + Thread.currentThread().getId()
+    if (running && iterNum > -1) {
       // Only record time if the CPUIterTimer is started by the user
       // Use nanoTime() for accurate measurement of duration
       val t0 = System.nanoTime()
@@ -46,14 +47,14 @@ object CPUIterTimer {
       val elapsedTime = (t1 - t0) / 1e6
       val start = end - elapsedTime
       val curMap = timerList(iterNum)
-      if (curMap.contains(name)) {
+      if (curMap.contains(newName)) {
         // If the event has already been recorded in this very iteration
-        curMap(name) += ((start, end))
+        curMap(newName) += ((start, end))
       } else {
         // If this is the first time the event happens in this iteration
         // We first create a list and then add the time
-        curMap(name) = new ListBuffer[(Double, Double)]
-        curMap(name) += ((start, end))
+        curMap(newName) = new ListBuffer[(Double, Double)]
+        curMap(newName) += ((start, end))
       }
       result
     } else {
@@ -138,11 +139,11 @@ object CPUIterTimer {
         for ((name, i) <- sortedNames.zipWithIndex) {
 
           var startEndList = timer(name)
-          if (startEndList.length > 10) {
-            // When there are too many time durations, randomly sample 10
-            // for faster plotting
-            startEndList = takeSample(startEndList, 10, System.currentTimeMillis)
-          }
+//          if (startEndList.length > 10) {
+//            // When there are too many time durations, randomly sample 10
+//            // for faster plotting
+//            startEndList = takeSample(startEndList, 10, System.currentTimeMillis)
+//          }
           for ((startEnd, j) <- startEndList.zipWithIndex) {
             val start = startEnd._1
             val end = startEnd._2
