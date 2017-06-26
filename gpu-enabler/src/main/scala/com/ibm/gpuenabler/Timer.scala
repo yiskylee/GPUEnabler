@@ -46,6 +46,7 @@ object CPUIterTimer {
       val end = System.currentTimeMillis.toDouble
       val elapsedTime = (t1 - t0) / 1e6
       val start = end - elapsedTime
+
       val curMap = timerList(iterNum)
       if (curMap.contains(newName)) {
         // If the event has already been recorded in this very iteration
@@ -137,13 +138,13 @@ object CPUIterTimer {
       for (timer <- timerList) {
         print("StartEndTimer: ")
         for ((name, i) <- sortedNames.zipWithIndex) {
-
-          var startEndList = timer(name)
-//          if (startEndList.length > 10) {
-//            // When there are too many time durations, randomly sample 10
-//            // for faster plotting
-//            startEndList = takeSample(startEndList, 10, System.currentTimeMillis)
-//          }
+          val startEndList =
+            if (timer.contains(name)) timer(name)
+            else {
+              val dummyStartEndList = new ListBuffer[(Double, Double)]
+              dummyStartEndList += ((0, 0))
+              dummyStartEndList
+            }
           for ((startEnd, j) <- startEndList.zipWithIndex) {
             val start = startEnd._1
             val end = startEnd._2
