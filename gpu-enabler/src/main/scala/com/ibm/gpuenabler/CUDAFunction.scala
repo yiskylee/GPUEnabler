@@ -430,10 +430,6 @@ class CUDAFunction(
           throw new SparkException("Number of stages in a kernel launch must be positive")
         }
 
-        // XILI
-        println("totalStagesFun exists")
-        // XILI
-
         // preserve the kernel parameter list so as to use it for every stage.
         val preserve_kp = kp
         (0 to totalStages - 1).foreach { stageNumber =>

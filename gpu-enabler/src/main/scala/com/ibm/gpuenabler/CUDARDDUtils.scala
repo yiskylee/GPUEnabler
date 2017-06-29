@@ -91,7 +91,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
     val blockId = RDDBlockId(this.id, split.index)
 
     // Handle empty partitions.
-    if (CPUIterTimer.time(firstParent[T].iterator(split, context), "iterator").length <= 0)
+    if (firstParent[T].getNumPartitions <= 0)
       return new Array[U](0).toIterator
 
     val inputHyIter = CPUIterTimer.time(firstParent[T].iterator(split, context) match {
