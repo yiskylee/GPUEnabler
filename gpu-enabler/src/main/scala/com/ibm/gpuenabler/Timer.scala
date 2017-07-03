@@ -54,8 +54,16 @@ object CPUIterTimer {
       } else {
         // If this is the first time the event happens in this iteration
         // We first create a list and then add the time
-        curMap(newName) = new ListBuffer[(Double, Double)]
-        curMap(newName) += ((start, end))
+        if (name == "kernelCompute") {
+          println(s"$newName does not exist")
+          curMap(newName) = new ListBuffer[(Double, Double)]
+          println(s"Add ListBuffer for $newName")
+          curMap(newName) += ((start, end))
+          println(s"Add (start end) to $newName")
+        } else {
+          curMap(newName) = new ListBuffer[(Double, Double)]
+          curMap(newName) += ((start, end))
+        }
       }
       result
     } else {
