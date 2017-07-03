@@ -55,11 +55,12 @@ object CPUIterTimer {
         // If this is the first time the event happens in this iteration
         // We first create a list and then add the time
         if (name == "kernelCompute") {
-          println(s"$newName does not exist")
           curMap(newName) = new ListBuffer[(Double, Double)]
-          println(s"Add ListBuffer for $newName")
+          println(s"${Thread.currentThread().getId()}: Add ListBuffer for $newName")
+          println(s"${Thread.currentThread().getId()}: Existing Keys: ")
+          curMap.keys.foreach(x => println(x.toString))
+          println("\n\n")
           curMap(newName) += ((start, end))
-          println(s"Add (start end) to $newName")
         } else {
           curMap(newName) = new ListBuffer[(Double, Double)]
           curMap(newName) += ((start, end))
