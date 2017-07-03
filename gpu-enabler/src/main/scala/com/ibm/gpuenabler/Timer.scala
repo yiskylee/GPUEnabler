@@ -35,7 +35,8 @@ object CPUIterTimer {
   }
 
   def time[R](block: => R, name: String): R = {
-    val newName = name + Thread.currentThread().getId()
+    val threadID = Thread.currentThread().getId()
+    val newName = name + threadID
     if (running && iterNum > -1) {
       // Only record time if the CPUIterTimer is started by the user
       // Use nanoTime() for accurate measurement of duration
@@ -56,11 +57,15 @@ object CPUIterTimer {
         // We first create a list and then add the time
         if (name == "kernelCompute") {
           curMap(newName) = new ListBuffer[(Double, Double)]
-          println(s"${Thread.currentThread().getId()}: Add ListBuffer for $newName")
-          println(s"${Thread.currentThread().getId()}: Existing Keys: ")
-          curMap.keys.foreach(x => println(x.toString))
-          println("\n\n")
+          if (curMap.contains(newName))
+            println(s"$threadID: Add ListBuffer for $newName")
+          else
+            println(s"$threadID: Failed to add ListBuffer for $newName")
+          //          println(s"${Thread.currentThread().getId()}: Existing Keys: ")
+          //          curMap.keys.foreach(x => println(x.toString))
           curMap(newName) += ((start, end))
+          println(s"$threadID: Pair Added")
+          println("\n\n")
         } else {
           curMap(newName) = new ListBuffer[(Double, Double)]
           curMap(newName) += ((start, end))
