@@ -2,17 +2,17 @@ package com.ibm.gpuenabler
 
 import jcuda.driver.{CUevent, CUstream, JCudaDriver}
 
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.ListBuffer
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.util.Random
 
 object CPUIterTimer {
   // Each element in the list is a timer corresponding to one iteration,
   // each timer contains the name and all (start, end) pairs
-  val timerList = new ListBuffer[HashMap[String, ListBuffer[(Double, Double)]]]
+  val timerList = new ListBuffer[TrieMap[String, ListBuffer[(Double, Double)]]]
   // Each element in the list is a timer corresponding to one iteration
   // each timer contains the name and elapsed time
-  val accumuTimerList = new ListBuffer[HashMap[String, Double]]
+  val accumuTimerList = new ListBuffer[TrieMap[String, Double]]
   var iterNum = -1
   var running = false
 
@@ -30,8 +30,8 @@ object CPUIterTimer {
   def startNewIter(): Unit = {
     // This marks the end of an iteration
     iterNum += 1
-    timerList += new HashMap[String, ListBuffer[(Double, Double)]]
-    accumuTimerList += new HashMap[String, Double]
+    timerList += new TrieMap[String, ListBuffer[(Double, Double)]]
+    accumuTimerList += new TrieMap[String, Double]
   }
 
   def time[R](block: => R, name: String): R = {
@@ -55,21 +55,8 @@ object CPUIterTimer {
       } else {
         // If this is the first time the event happens in this iteration
         // We first create a list and then add the time
-        if (name == "kernelCompute") {
-          curMap(newName) = new ListBuffer[(Double, Double)]
-          if (curMap.contains(newName))
-            println(s"$threadID: Add ListBuffer for $newName")
-          else
-            println(s"$threadID: Failed to add ListBuffer for $newName")
-          //          println(s"${Thread.currentThread().getId()}: Existing Keys: ")
-          //          curMap.keys.foreach(x => println(x.toString))
-          curMap(newName) += ((start, end))
-          println(s"$threadID: Pair Added")
-          println("\n\n")
-        } else {
           curMap(newName) = new ListBuffer[(Double, Double)]
           curMap(newName) += ((start, end))
-        }
       }
       result
     } else {

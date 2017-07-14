@@ -50,7 +50,7 @@ fi
 
 if [[ $? -eq 0 ]]; then
 	echo "Successfully build gpu-enabler, now building Spark assembly"
-	cp gpu-enabler/target/gpu-enabler_2.11-1.0.0.jar /home/xiangyu/Dropbox/spark/spark-2.1.0/assembly/target/scala-2.11/jars/
+	cp ${GPUENABLER_PATH}/gpu-enabler/target/gpu-enabler_2.11-1.0.0.jar ${SPARK_HOME}/assembly/target/scala-2.11/jars/
 #	cd ${SPARK_HOME}
 #	./build/mvn -pl :spark-assembly_2.11 -DskipTests source:jar install
 #	cd -
