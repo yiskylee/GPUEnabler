@@ -127,10 +127,10 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   }
 
   // TODO: Discuss the need for finalize; how to handle streams;
-  override def finalize(): Unit = {
-    JCuda.cudaStreamDestroy(stream)
-    super.finalize
-  }
+//  override def finalize(): Unit = {
+//    JCuda.cudaStreamDestroy(stream)
+//    super.finalize
+//  }
 
   // This function is used to copy the CPU memory to GPU for
   // an existing Hybrid Iterator
