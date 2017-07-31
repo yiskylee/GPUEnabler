@@ -253,11 +253,17 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
             case DataSchema(name, "DenseVector[Double]", length) =>
               val size: Int = inputArr.length * length * 8
               val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => {
-                buffer.position(bufferOffset)
-                buffer.asDoubleBuffer().put(x.asInstanceOf[DenseVector[Double]].data, 0, length)
-                bufferOffset += length * 8
-              })
+              for (i <- 0 until inputArr.length) {
+                val vec = inputArr(i).asInstanceOf[DenseVector[Double]].data
+                for (j <- 0 until vec.length) {
+                  buffer.asDoubleBuffer().put(j * inputArr.length + i, vec(j))
+                }
+              }
+//              inputArr.foreach(x => {
+//                buffer.position(bufferOffset)
+//                buffer.asDoubleBuffer().put(x.asInstanceOf[DenseVector[Double]].data, 0, length)
+//                bufferOffset += length * 8
+//                })
               (ptr, size)
           }
         }
