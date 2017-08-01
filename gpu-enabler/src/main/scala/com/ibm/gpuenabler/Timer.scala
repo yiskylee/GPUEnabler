@@ -66,17 +66,28 @@ object CPUIterTimer {
   }
 
   def accumuTime[R](block: => R, name: String): R = {
-    if (running) {
+    val threadID = Thread.currentThread().getId()
+    val newName = name + threadID
+    if (running && iterNum > -1) {
       val t0 = System.nanoTime()
       val result = block
       val t1 = System.nanoTime()
+      // use currentTimeMills to get the correct time stamp
+      val end = System.currentTimeMillis.toDouble
       val elapsedTime = (t1 - t0) / 1e6
-      val curMap = accumuTimerList(iterNum)
-      if (curMap.contains(name)) {
+      val start = end - elapsedTime
+
+      val curMap = timerList(iterNum)
+      if (curMap.contains(newName)) {
         // If the event has already been recorded in this very iteration
-        curMap(name) += elapsedTime
+        // just accumulate the end time
+        val newEnd = curMap(newName)(0)._2 + elapsedTime
+        val newStartEnd = curMap(newName)(0).copy(_2=newEnd)
+        // Replace the old start end with the new start end
+        curMap(newName)(0) = newStartEnd
       } else {
-        curMap(name) = elapsedTime
+        curMap(newName) = new ListBuffer[(Double, Double)]
+        curMap(newName) += ((start, end))
       }
       result
     } else {
