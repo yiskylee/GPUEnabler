@@ -27,6 +27,7 @@ import jcuda.runtime.{JCuda, cudaStream_t}
 import org.apache.commons.io.IOUtils
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, RDDBlockId}
+import org.apache.spark.mllib.linalg.{Vector, DenseVector}
 
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -35,7 +36,6 @@ import scala.language.implicitConversions
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
 
 import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
-import breeze.linalg.DenseVector
 
 
 /**
@@ -297,9 +297,10 @@ class CUDAFunction(
         cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), FLOAT_COLUMN.bytes, cuStream)
         (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), FLOAT_COLUMN.bytes)
       }
-      case h if h.isInstanceOf[DenseVector[_]] => {
-        val arr = h.asInstanceOf[DenseVector[Double]].data
-        val sz = arr.length * DOUBLE_COLUMN.bytes
+      case h if h.isInstanceOf[Array[Vector]] => {
+        val arr = h.asInstanceOf[Array[Vector]].map(v => v.toArray).
+          reduce((a, b) => a ++ b)
+        val sz = arr.size * DOUBLE_COLUMN.bytes
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
         cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), sz, cuStream)
         (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), sz)

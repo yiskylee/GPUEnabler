@@ -27,6 +27,9 @@ import jcuda.{CudaException, Pointer}
 
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.mllib.linalg.DenseVector
+
+
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -34,8 +37,6 @@ import scala.reflect.runtime._
 import scala.reflect.runtime.{universe => ru}
 import scala.reflect.runtime.universe.TermSymbol
 import scala.collection.mutable.HashMap
-
-import breeze.linalg.DenseVector
 
 // scalastyle:off no.finalize
 private[gpuenabler] case class KernelParameterDesc(
@@ -254,8 +255,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
               val size: Int = inputArr.length * length * 8
               val (ptr, buffer) = allocPinnedHeap(size)
               for (i <- 0 until inputArr.length) {
-                val vec = inputArr(i).asInstanceOf[DenseVector[Double]].data
-                for (j <- 0 until vec.length) {
+                val vec = inputArr(i).asInstanceOf[DenseVector].values
+                for (j <- 0 until vec.size) {
                   buffer.asDoubleBuffer().put(j * inputArr.length + i, vec(j))
                 }
               }
