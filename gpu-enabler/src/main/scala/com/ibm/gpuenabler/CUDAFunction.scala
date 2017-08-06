@@ -205,7 +205,8 @@ class CUDAFunction(
                     val resourceURL: Any,
                     val constArgs: Seq[AnyVal] = Seq(),
                     val stagesCount: Option[Long => Int] = None,
-                    val dimensions: Option[(Long, Int) => (Int, Int)] = None
+                    val dimensions: Option[(Long, Int) => (Int, Int)] = None,
+                    val sharedMemSize: Option[Int]
                   )
   extends ExternalFunction {
   implicit def toScalaFunction(fun: JFunction[Long, Int]): Long => Int = x => fun.call(x)
@@ -253,7 +254,10 @@ class CUDAFunction(
     cuLaunchKernel(function,
       gpuGridSize, 1, 1, // how many blocks
       gpuBlockSize, 1, 1, // threads per block (eg. 1024)
-      0, cuStream, // Shared memory size and stream
+      sharedMemSize match {
+        case None => 0
+        case Some(sharedMemSize) => sharedMemSize
+      }, cuStream, // Shared memory size and stream
       kernelParameters, null // Kernel- and extra parameters
     )
   }
