@@ -3,7 +3,7 @@ package com.ibm.gpuenabler
 import jcuda.driver.{CUevent, CUstream, JCudaDriver}
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, ListBuffer, SortedSet}
 import scala.util.Random
 
 object CPUIterTimer {
@@ -13,6 +13,7 @@ object CPUIterTimer {
   // Each element in the list is a timer corresponding to one iteration
   // each timer contains the name and elapsed time
   val accumuTimerList = new ListBuffer[TrieMap[String, Double]]
+  val timerNames = SortedSet[String]()
   var iterNum = -1
   var running = false
 
@@ -35,9 +36,11 @@ object CPUIterTimer {
   }
 
   def time[R](block: => R, name: String): R = {
-    val threadID = Thread.currentThread().getId()
-    val newName = name + threadID
     if (running && iterNum > -1) {
+      val threadID = Thread.currentThread().getId()
+      val newName = name + threadID
+      timerNames += newName
+
       // Only record time if the CPUIterTimer is started by the user
       // Use nanoTime() for accurate measurement of duration
       val t0 = System.nanoTime()
@@ -140,16 +143,15 @@ object CPUIterTimer {
   def printIterTime(): Unit = {
     if (!timerList(0).isEmpty) {
       print("StartEndTimer: ")
-      val sortedNames = timerList(0).toSeq.sortBy(_._1).map(_._1)
-      for ((name, index) <- sortedNames.zipWithIndex) {
-        if (index == sortedNames.length - 1)
+      for ((name, index) <- timerNames.zipWithIndex) {
+        if (index == timerNames.size - 1)
           print(name + "\n")
         else
           print(name + ",")
       }
       for (timer <- timerList) {
         print("StartEndTimer: ")
-        for ((name, i) <- sortedNames.zipWithIndex) {
+        for ((name, i) <- timerNames.zipWithIndex) {
           val startEndList =
             if (timer.contains(name)) timer(name)
             else {
@@ -160,9 +162,9 @@ object CPUIterTimer {
           for ((startEnd, j) <- startEndList.zipWithIndex) {
             val start = startEnd._1
             val end = startEnd._2
-            if (j == startEndList.length - 1 && i != sortedNames.length - 1)
+            if (j == startEndList.length - 1 && i != timerNames.size - 1)
               print(start + "|" + end + ",")
-            else if (j == startEndList.length - 1 && i == sortedNames.length - 1) {
+            else if (j == startEndList.length - 1 && i == timerNames.size - 1) {
               print(start + "|" + end + "\n")
             } else {
               print(start + "|" + end + "|")
