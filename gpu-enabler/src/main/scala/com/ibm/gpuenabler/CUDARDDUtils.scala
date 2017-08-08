@@ -85,9 +85,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 //  private val inputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[T], "schemaForT")
 //  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
 
-  override def compute(split: Partition, context: TaskContext): Iterator[U] =
-  CPUIterTimer.time(
-  {
+  override def compute(split: Partition, context: TaskContext): Iterator[U] = {
     if (split.index %4 != 0) {
       println(s"split index == ${split.index}, running on GPU, threadID: ${Thread.currentThread().getId()}")
       // Use the block ID of this particular (rdd, partition)
@@ -146,7 +144,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
         resultIter
       }
     }
-  }, "compute")
+  }
 }
 
 ///**

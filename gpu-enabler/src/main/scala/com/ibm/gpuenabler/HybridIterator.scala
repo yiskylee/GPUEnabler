@@ -58,7 +58,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
     copyGpuToCpu
-    _arr = CPUIterTimer.time(getResultList, "getResultList")
+    _arr = getResultList
     _arr
   } else {
     _arr
