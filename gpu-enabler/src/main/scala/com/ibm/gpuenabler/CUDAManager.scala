@@ -21,8 +21,8 @@ import java.net.URL
 
 import jcuda.Pointer
 import jcuda.driver.JCudaDriver._
-import jcuda.driver.{CUdeviceptr, CUmodule, JCudaDriver}
-import jcuda.runtime.JCuda
+import jcuda.driver.{CUdeviceptr, CUmodule, CUstream, JCudaDriver}
+import jcuda.runtime.{JCuda, cudaStream_t}
 import org.apache.commons.io.IOUtils
 import org.apache.spark.SparkException
 import org.slf4j.{Logger, LoggerFactory}
@@ -52,6 +52,10 @@ private[gpuenabler] class CUDAManager {
     case ex: Throwable =>
       throw new SparkException("Could not initialize CUDA because of unknown reason", ex)
   }
+
+  val stream = new cudaStream_t
+  JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
+  val cuStream = new CUstream(stream)
 
   // private[gpuenabler] def cachedLoadModule(resource: Either[URL, (String, String)]): CUmodule = {
   // TODO : change it back to private after development

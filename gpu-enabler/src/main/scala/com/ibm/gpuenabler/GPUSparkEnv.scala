@@ -54,7 +54,7 @@ private[gpuenabler] object GPUSparkEnv extends _Logging {
   private var env : GPUSparkEnv = _
   private var oldSparkEnv : SparkEnv = _
 
-  def initalize(): Unit = {
+  def initialize(): Unit = {
       env = new GPUSparkEnv()
   }
 
@@ -63,7 +63,7 @@ private[gpuenabler] object GPUSparkEnv extends _Logging {
     this.synchronized {
       if (SparkEnv.get != oldSparkEnv) {
         oldSparkEnv = SparkEnv.get
-        initalize()
+        initialize()
       }
       env
     }

@@ -36,6 +36,8 @@ private[gpuenabler] case object ColumnFormat extends PartitionFormat
 
 case class DataSchema(val name: String, val dataType: String, val length: Int)
 
+case class TempBuffer(val name: String, val dataType: String, val size: Int => Int, val mode: String)
+
 
 private[gpuenabler] object ColumnPartitionSchema {
 

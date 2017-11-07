@@ -29,6 +29,9 @@ private[gpuenabler] case class CacheGPU(id : Int)
 
 private[gpuenabler] class GPUMemoryManagerMasterEndPoint(val rpcEnv: _RpcEnv) extends _ThreadSafeRpcEndpoint {
 
+  // Storing gpuRDDs' IDs when slave GPUMemoryManagers have not yet started
+  val gpuRddsToBeCached = new mutable.ListBuffer[Int]()
+
   val GPUMemoryManagerSlaves = new mutable.HashMap[String, _RpcEndpointRef]()
 
   def registerGPUMemoryManager(id : String, slaveEndpointRef: _RpcEndpointRef): Unit = {
@@ -42,14 +45,24 @@ private[gpuenabler] class GPUMemoryManagerMasterEndPoint(val rpcEnv: _RpcEnv) ex
   }
 
   def cacheGPU(rddId : Int): Unit = {
-    for (slaveRef <- GPUMemoryManagerSlaves.values){
-      tell(slaveRef, CacheGPU(rddId))
+    if (GPUMemoryManagerSlaves.size == 0)
+    // When cacheGPU is called, but slave nodes have not registered with master node yet,
+    // just add the rddId to the to be cached list
+      gpuRddsToBeCached += rddId
+    else {
+      //when all slave nodes have registered, we just tell them to cache gpu.
+      for (slaveRef <- GPUMemoryManagerSlaves.values){
+        tell(slaveRef, CacheGPU(rddId))
+      }
     }
   }
 
   override def receiveAndReply(context: _RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterGPUMemoryManager(id, slaveEndPointRef) =>
       registerGPUMemoryManager(id, slaveEndPointRef)
+      // actually do cache GPU here
+      for (rddId <- gpuRddsToBeCached)
+        tell(slaveEndPointRef, CacheGPU(rddId))
       context.reply (true)
     case UncacheGPU(rddId : Int) =>
       unCacheGPU(rddId)
@@ -101,7 +114,7 @@ private[gpuenabler] class GPUMemoryManager(val executorId : String,
 
   def getCachedGPUPointers : mutable.HashMap[String, KernelParameterDesc] = cachedGPUPointers
 
-  if (!isDriver || isLocal) {
+  if (!isDriver) {
     val slaveEndpoint = rpcEnv.setupEndpoint(
       "GPUMemoryManagerSlaveEndpoint_" + executorId,
       new GPUMemoryManagerSlaveEndPoint(rpcEnv, this))
@@ -129,11 +142,19 @@ private[gpuenabler] class GPUMemoryManager(val executorId : String,
   }
 
   def unCacheGPUSlaves(rddId : Int): Unit = {
-    tell(com.ibm.gpuenabler.UncacheGPU(rddId))
+    if (isLocal)
+      unCacheGPU(rddId)
+    else
+      tell(com.ibm.gpuenabler.UncacheGPU(rddId))
   }
 
   def cacheGPUSlaves(rddId : Int): Unit = {
-    tell(com.ibm.gpuenabler.CacheGPU(rddId))
+    if (isLocal) {
+      cacheGPU(rddId)
+    }
+    else {
+      tell(com.ibm.gpuenabler.CacheGPU(rddId))
+    }
   }
 
   /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */

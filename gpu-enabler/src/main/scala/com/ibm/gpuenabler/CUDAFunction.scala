@@ -27,15 +27,23 @@ import jcuda.runtime.{JCuda, cudaStream_t}
 import org.apache.commons.io.IOUtils
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, RDDBlockId}
-import org.apache.spark.mllib.linalg.{Vector, DenseVector}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
-
 import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
+
+import breeze.linalg.{DenseVector => BrDenseVector}
+
+import scala.collection.mutable
+import scala.collection.mutable.HashMap
+
+case class dim3(x: Int, y: Int = 1, z: Int = 1)
+
+case class TempBufferParamDesc(devPtr: CUdeviceptr, gpuPtr: Pointer, size: Int)
 
 
 /**
@@ -46,12 +54,14 @@ abstract class ExternalFunction extends Serializable {
                                         outputSize: Option[Int] = None,
                                         outputArraySizes: Seq[Int] = null,
                                         inputFreeVariables: Seq[Any] = null,
-                                        blockId: Option[BlockId] = None): Iterator[U]
+                                        blockId: Option[BlockId] = None) : Iterator[U]
 
   def inputColumnsOrder(): Seq[DataSchema]
 
   def outputColumnsOrder(): Seq[DataSchema]
 }
+
+
 
 /**
   * * A class to represent a ''User Defined function'' from a Native GPU program.
@@ -182,7 +192,7 @@ abstract class ExternalFunction extends Serializable {
   * @constructor The "compute" method is initialized so that when invoked it will
   *              load and launch the GPU kernel with the required set of parameters
   *              based on the input & output column order.
-  * @param funcName            Name of the Native code's function
+  * @param funcNames            Name of the Native code's function
   * @param _inputColumnsOrder  List of input columns name mapping to corresponding
   *                            class members of the input RDD.
   * @param _outputColumnsOrder List of output columns name mapping to corresponding
@@ -198,15 +208,16 @@ abstract class ExternalFunction extends Serializable {
   *                            dimensions based on the number of partition items but for a single
   *                            stage.
   */
-class CUDAFunction(
-                    val funcName: String,
+class CUDAFunction( val funcNames: Seq[String],
                     val _inputColumnsOrder: Seq[DataSchema] = null,
                     val _outputColumnsOrder: Seq[DataSchema] = null,
                     val resourceURL: Any,
                     val constArgs: Seq[AnyVal] = Seq(),
+                    val szDependArgs: Seq[Int => Int] = Seq(),
                     val stagesCount: Option[Long => Int] = None,
-                    val dimensions: Option[(Long, Int) => (Int, Int)] = None,
-                    val sharedMemSize: Option[Int]
+                    val dimensions: Seq[Option[(Long, Int) => (dim3, dim3)]] = null,
+                    val tempBuffers: Seq[TempBuffer] = null,
+                    val sharedMemSize: Option[Int] = None
                   )
   extends ExternalFunction {
   implicit def toScalaFunction(fun: JFunction[Long, Int]): Long => Int = x => fun.call(x)
@@ -220,31 +231,43 @@ class CUDAFunction(
 
   var _blockId: Option[BlockId] = Some(RDDBlockId(0, 0))
 
+  val cachedTempBuffers: HashMap[String, TempBufferParamDesc] = new mutable.HashMap[String, TempBufferParamDesc]
+
   //touch GPUSparkEnv for endpoint init
   GPUSparkEnv.get
+  // ptxmodule is a byte array of either ptx file or cubin file
   val ptxmodule = resourceURL match {
     case resourceURL: URL =>
-      (resourceURL.toString, {
-        val inputStream = resourceURL.openStream()
-        val moduleBinaryData = IOUtils.toByteArray(inputStream)
-        inputStream.close()
-        new String(moduleBinaryData.map(_.toChar))
-      })
-    case (name: String, ptx: String) => (name, ptx)
-    case _ => throw new UnsupportedOperationException("this type is not supported for module")
+      resourceURL
   }
+//  val ptxmodule = resourceURL match {
+//    case resourceURL: URL =>
+//      (resourceURL.toString, {
+//        val inputStream = resourceURL.openStream()
+//        val moduleBinaryData = IOUtils.toByteArray(inputStream)
+//        inputStream.close()
+//        new String(moduleBinaryData.map(_.toChar))
+//      })
+//    case (name: String, ptx: String) => (name, ptx)
+//    case _ => throw new UnsupportedOperationException("this type is not supported for module")
+//  }
 
   // asynchronous Launch of kernel
   private def launchKernel(function: CUfunction, numElements: Int,
                            kernelParameters: Pointer,
-                           dimensions: Option[(Long, Int) => (Int, Int)] = None,
+                           dimensions: Option[(Long, Int) => (dim3, dim3)] = None,
                            stageNumber: Int = 1,
                            cuStream: CUstream) = {
 
-    val (gpuGridSize, gpuBlockSize) = dimensions match {
+    val (grid: dim3, block: dim3) = dimensions match {
       case Some(computeDim) => computeDim(numElements, stageNumber)
       case None => GPUSparkEnv.get.cudaManager.computeDimensions(numElements)
     }
+
+//    println(s"gpuGridSize: ${grid}, gpuBlockSize: ${block}")
+
+//    val numChunks = (numElements + gpuBlockSize - 1) / gpuBlockSize
+//    val gpuGridSize = (numChunks + pointsPerThread - 1) / pointsPerThread
 
     //    // XILI
     //    val sw = new StringWriter
@@ -252,14 +275,30 @@ class CUDAFunction(
     //    println(sw.toString)
     //    // XILI
     cuLaunchKernel(function,
-      gpuGridSize, 1, 1, // how many blocks
-      gpuBlockSize, 1, 1, // threads per block (eg. 1024)
+      grid.x, grid.y, grid.z, // how many blocks
+      block.x, block.y, block.z, // threads per block (eg. 1024)
       sharedMemSize match {
         case None => 0
         case Some(sharedMemSize) => sharedMemSize
       }, cuStream, // Shared memory size and stream
       kernelParameters, null // Kernel- and extra parameters
     )
+  }
+
+  def createTempBufferParam(a: TempBuffer, cuStream: CUstream, numElem: Int):
+  TempBufferParamDesc = {
+    a match {
+      case TempBuffer(name, "Array[Int]", nToLength, mode) =>
+        val sz = nToLength(numElem) * INT_COLUMN.bytes
+        val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
+        cuMemsetD32Async(devPtr, 0, sz/4, cuStream)
+        new TempBufferParamDesc(devPtr, Pointer.to(devPtr), sz)
+      case TempBuffer(name, "Array[Double]", nToLength, mode) =>
+        val sz = nToLength(numElem) * DOUBLE_COLUMN.bytes
+        val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
+        cuMemsetD32Async(devPtr, 0, sz/4, cuStream)
+        new TempBufferParamDesc(devPtr, Pointer.to(devPtr), sz)
+    }
   }
 
   def createkernelParameterDesc2(a: Any, cuStream: CUstream):
@@ -316,6 +355,13 @@ class CUDAFunction(
         cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), sz, cuStream)
         (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), sz)
       }
+      case h if h.isInstanceOf[BrDenseVector[Double]] => {
+        val arr = h.asInstanceOf[BrDenseVector[Double]].data
+        val sz = arr.length * DOUBLE_COLUMN.bytes
+        val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
+        cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), sz, cuStream)
+        (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), sz)
+      }
       case h if h.isInstanceOf[Array[Int]] => {
         val arr = h.asInstanceOf[Array[Int]]
         val sz = h.asInstanceOf[Array[Int]].length * INT_COLUMN.bytes
@@ -351,37 +397,45 @@ class CUDAFunction(
                                         outputArraySizes: Seq[Int] = null,
                                         inputFreeVariables: Seq[Any] = null,
                                         blockId: Option[BlockId] = None): Iterator[U] = {
-    val module = GPUSparkEnv.get.cudaManager.cachedLoadModule(Right(ptxmodule))
-    val function = new CUfunction
-    cuModuleGetFunction(function, module, funcName)
+    val module = GPUSparkEnv.get.cudaManager.cachedLoadModule(Left(ptxmodule))
 
-    val stream = new cudaStream_t
-    JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
-    val cuStream = new CUstream(stream)
+    val functions: Seq[CUfunction] = funcNames.map {funcName =>
+      val function = new CUfunction
+      cuModuleGetFunction(function, module, funcName)
+      function
+    }
+
+//    val function = new CUfunction
+//    cuModuleGetFunction(function, module, funcName)
 
     _blockId = blockId
+    // The cuda stream used by compute is the same as the input data
+    val cuStream = inputHyIter.getCuStream
 
 //    val inputColumnSchema = columnSchemas(0)
 //    val outputColumnSchema = columnSchemas(1)
 
     // Ensure the GPU is loaded with the same data in memory
+//    println(s"copyCpuToGpu for ${inputHyIter.getName}")
     inputHyIter.copyCpuToGpu
+//    println("copyCpuToGpu Done")
 
-    var listDevPtr: List[CUdeviceptr] = null
+//    var listDevPtr: List[CUdeviceptr] = null
 
     // hardcoded first argument
-    // XILI
-    val (arr, hptr, devPtr: CUdeviceptr, gptr, sz) =
-      GPUTimer.time(createkernelParameterDesc2(inputHyIter.numElements, cuStream),
-        cuStream, "HtoD")
-    //XILI
+//    // XILI
+//    val (arr, hptr, devPtr: CUdeviceptr, gptr, sz) =
+//      GPUTimer.time(createkernelParameterDesc2(inputHyIter.numElements, cuStream),
+//        cuStream, "HtoD")
+//    //XILI
 
-    listDevPtr = List(devPtr)
+    var listDevPtr = List[CUdeviceptr]()
     // size + input Args based on inputColumnOrder + constArgs
-    var kp: List[Pointer] = List(gptr) ++ inputHyIter.listKernParmDesc.map(_.gpuPtr)
+    var kp: List[Pointer] = List(Pointer.to(Array.fill(1)(inputHyIter.numElements))) ++
+      inputHyIter.listKernParmDesc.map(_.gpuPtr)
 
     val outputHyIter = new HybridIterator[U](null,
-      outputColumnsOrder, blockId,
+      outputColumnsOrder, blockId, cuStream,
       outputSize.getOrElse(inputHyIter.numElements), outputArraySizes = outputArraySizes)
 
     kp = kp ++ outputHyIter.listKernParmDesc.map(_.gpuPtr)
@@ -390,8 +444,7 @@ class CUDAFunction(
     if (inputFreeVariables != null) {
       // XILI
       val inputFreeVarPtrs = inputFreeVariables.map { inputFreeVariable =>
-        GPUTimer.time(createkernelParameterDesc2(inputFreeVariable, cuStream),
-          cuStream, "HtoD")
+        createkernelParameterDesc2(inputFreeVariable, cuStream)
       }
       kp = kp ++ inputFreeVarPtrs.map(_._4) // gptr
       listDevPtr = listDevPtr ++ inputFreeVarPtrs.map(_._3) // CUdeviceptr
@@ -399,22 +452,41 @@ class CUDAFunction(
 
     // add outputArraySizes to the list of arguments
     if (outputArraySizes != null) {
-      val outputArraySizes_kpd = GPUTimer.time(
-        createkernelParameterDesc2(outputArraySizes.toArray, cuStream),
-        cuStream, "HtoD")
+      val outputArraySizes_kpd =
+        createkernelParameterDesc2(outputArraySizes.toArray, cuStream)
       kp = kp ++ Seq(outputArraySizes_kpd._4) // gpuPtr
       listDevPtr = listDevPtr ++ List(outputArraySizes_kpd._3) // CUdeviceptr
     }
 
+    if (tempBuffers != null) {
+      val tempBufferPtrs = tempBuffers.map {tempBuffer =>
+        val tempBufferPtr = cachedTempBuffers.getOrElseUpdate(tempBuffer.name,
+          createTempBufferParam(tempBuffer, cuStream, inputHyIter.numElements))
+        // If this temporary buffer is not passed from last kernel but need to be initialized to 0s
+        if (tempBuffer.mode == "init")
+          cuMemsetD32Async(tempBufferPtr.devPtr, 0, tempBufferPtr.size/4, cuStream)
+        tempBufferPtr
+      }
+      kp = kp ++ tempBufferPtrs.map(_.gpuPtr)
+    }
     // add user provided constant variables
     if (constArgs != null) {
-      val inputConstPtrs = constArgs.map { constVariable =>
-        GPUTimer.time(createkernelParameterDesc2(constVariable, cuStream),
-          cuStream,
-          "HtoD")
+//      val inputConstPtrs = constArgs.map { constVariable =>
+//        GPUTimer.time(createkernelParameterDesc2(constVariable, cuStream),
+//          cuStream,
+//          "HtoD")
+//      }
+      constArgs.foreach { arg =>
+        kp = kp ++ Seq(Pointer.to(Array.fill(1)(arg.asInstanceOf[Int])))
       }
-      kp = kp ++ inputConstPtrs.map(_._4) // gpuPtr
-      listDevPtr = listDevPtr ++ inputConstPtrs.map(_._3) // CUdeviceptr
+//      kp = kp ++ inputConstPtrs.map(_._4) // gpuPtr
+//      listDevPtr = listDevPtr ++ inputConstPtrs.map(_._3) // CUdeviceptr
+    }
+
+    if (szDependArgs != null) {
+      szDependArgs.foreach { arg =>
+        kp = kp ++ Seq(Pointer.to(Array.fill(1)(arg(inputHyIter.numElements))))
+      }
     }
 
     stagesCount match {
@@ -424,8 +496,9 @@ class CUDAFunction(
         val kernelParameters = Pointer.to(kp: _*)
         // Start the GPU execution with the populated kernel parameters
         // XILI
-        GPUTimer.time(launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, 1, cuStream),
-          cuStream, "Execution")
+        functions.zip(dimensions).foreach { case (function, dimension) =>
+          launchKernel(function, inputHyIter.numElements, kernelParameters, dimension, 1, cuStream)
+        }
         // XILI
 
       // launch kernel multiple times (multiple stages), suitable for reduce
@@ -437,7 +510,7 @@ class CUDAFunction(
 
         // preserve the kernel parameter list so as to use it for every stage.
         val preserve_kp = kp
-        (0 to totalStages - 1).foreach { stageNumber =>
+        (0 until totalStages).foreach { stageNumber =>
           val stageParams =
             List(Pointer.to(Array[Int](stageNumber)), Pointer.to(Array[Int](totalStages)))
 
@@ -456,7 +529,9 @@ class CUDAFunction(
           val kernelParameters = Pointer.to(kp: _*)
 
           // Start the GPU execution with the populated kernel parameters
-          launchKernel(function, inputHyIter.numElements, kernelParameters, dimensions, stageNumber, cuStream)
+          functions.zip(dimensions).foreach { case (function, dimension) =>
+            launchKernel(function, inputHyIter.numElements, kernelParameters, dimension, 1, cuStream)
+          }
         }
     }
 
@@ -468,8 +543,6 @@ class CUDAFunction(
 
     outputHyIter.freeGPUMemory
     inputHyIter.freeGPUMemory
-
-    JCuda.cudaStreamDestroy(stream)
 
     outputHyIter.asInstanceOf[Iterator[U]]
   }

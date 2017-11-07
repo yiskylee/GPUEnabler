@@ -68,6 +68,10 @@ object CPUIterTimer {
     }
   }
 
+//  def time[R](block: => R, name: String): R = {
+//      block
+//  }
+
   def accumuTime[R](block: => R, name: String): R = {
     val threadID = Thread.currentThread().getId()
     val newName = name + threadID
@@ -327,14 +331,19 @@ object GPUTimer extends Timer {
 
   private var timers = new ListBuffer[GPUTimerCls]()
 
+//  def time[R](block: =>R, stream: CUstream, eventType: String): R = {
+//    val timer = new GPUTimerCls(stream, eventType)
+//    timer.start()
+//    val result = block
+//    timer.stop()
+//    timers += timer
+//    result
+//  }
+
   def time[R](block: =>R, stream: CUstream, eventType: String): R = {
-    val timer = new GPUTimerCls(stream, eventType)
-    timer.start()
-    val result = block
-    timer.stop()
-    timers += timer
-    result
+    block
   }
+
   def getTimers:ListBuffer[GPUTimerCls] = timers
 
   def restart(): Unit = {

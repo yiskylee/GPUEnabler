@@ -27,15 +27,12 @@ import jcuda.{CudaException, Pointer}
 
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.RDDBlockId
+import breeze.linalg.{DenseVector => BrDenseVector}
 import org.apache.spark.mllib.linalg.DenseVector
-
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
-import scala.reflect.runtime._
-import scala.reflect.runtime.{universe => ru}
-import scala.reflect.runtime.universe.TermSymbol
 import scala.collection.mutable.HashMap
 
 // scalastyle:off no.finalize
@@ -50,19 +47,22 @@ private[gpuenabler] case class KernelParameterDesc(
 private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
                                                       __columnsOrder: Seq[DataSchema],
                                                       _blockId: Option[BlockId],
+                                                      cuStream: CUstream = null,
                                                       numentries: Int = 0,
-                                                      outputArraySizes: Seq[Int] = null) extends Iterator[T] {
+                                                      outputArraySizes: Seq[Int] = null
+                                                     ) extends Iterator[T] {
 
   private var _arr: Array[T] = inputArr
 
   def arr: Array[T] = if (_arr == null) {
     // Validate the CPU pointers before deserializing
     copyGpuToCpu
-    _arr = getResultList
+    _arr = CPUIterTimer.time(getResultList, "getResultList")
     _arr
   } else {
     _arr
   }
+  def getName: String = __columnsOrder(0).name
 
   private var columnsOrder = __columnsOrder
 
@@ -75,6 +75,14 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     // the object has only one element in it.
     columnsOrder.foreach(_ => tempbuf += 1)
     tempbuf
+  }
+
+  private val _cuStream = if (cuStream != null) {
+    cuStream
+  } else {
+    val stream = new cudaStream_t
+    JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
+    new CUstream(stream)
   }
 
   var _numElements = if (inputArr != null) inputArr.length else 0
@@ -95,10 +103,6 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   def numElements: Int = _numElements
 
-  val stream = new cudaStream_t
-  JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
-  val cuStream = new CUstream(stream)
-
   def hasNext: Boolean = {
     idx < arr.length - 1
   }
@@ -107,6 +111,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     idx = idx + 1
     arr(idx)
   }
+
+  def getCuStream = _cuStream
 
   private def gpuCache: Boolean = GPUSparkEnv.get.gpuMemoryManager.cachedGPURDDs.contains(rddId)
 
@@ -118,7 +124,16 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       if (_listKernParmDesc == null) return
       _listKernParmDesc = _listKernParmDesc.map(kpd => {
         if (kpd.devPtr != null) {
+//          if (columnsOrder(0).name == "costs") {
+//            println("costs not cached and kpd.devPtr is not null")
+//          }
           GPUSparkEnv.get.cudaManager.freeGPUMemory(kpd.devPtr)
+//          if (columnsOrder(0).name == "costs") {
+//            if (kpd.devPtr == null)
+//              println("kpd.devPtr is null after freeGPUMemory")
+//            else
+//              println("kpd.devPtr is not null after freeGPUMemory")
+//          }
         }
         KernelParameterDesc(kpd.cpuArr, kpd.cpuPtr, null, null, kpd.sz)
       })
@@ -128,10 +143,10 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
   }
 
   // TODO: Discuss the need for finalize; how to handle streams;
-//  override def finalize(): Unit = {
-//    JCuda.cudaStreamDestroy(stream)
-//    super.finalize
-//  }
+  //  override def finalize(): Unit = {
+  //    JCuda.cudaStreamDestroy(stream)
+  //    super.finalize
+  //  }
 
   // This function is used to copy the CPU memory to GPU for
   // an existing Hybrid Iterator
@@ -141,10 +156,8 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
       if (kpd.devPtr == null) {
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(kpd.sz)
         // XILI
-        GPUTimer.time(cuMemcpyHtoDAsync(devPtr, kpd.cpuPtr, kpd.sz, cuStream),
-          cuStream, "HtoD")
+        cuMemcpyHtoDAsync(devPtr, kpd.cpuPtr, kpd.sz, _cuStream)
         // XILI
-        cuCtxSynchronize()
         val gPtr = Pointer.to(devPtr)
         KernelParameterDesc(kpd.cpuArr, kpd.cpuPtr, devPtr, gPtr, kpd.sz)
       } else {
@@ -202,9 +215,13 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
             val y = new Array[Double](kpd.sz / DOUBLE_COLUMN.bytes)
             (y, Pointer.to(y))
           }
+          case c if c == "BrDenseVector[Double]" => {
+            val y = new Array[Double](kpd.sz / DOUBLE_COLUMN.bytes)
+            (y, Pointer.to(y))
+          }
         }
-        // XILI`
-        GPUTimer.time(cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, cuStream), cuStream, "DtoH")
+        // XILI
+        cuMemcpyDtoHAsync(cpuPtr, kpd.devPtr, kpd.sz, _cuStream)
         // XILI
         KernelParameterDesc(cpuArr, cpuPtr, kpd.devPtr, kpd.gpuPtr, kpd.sz)
       } else {
@@ -232,74 +249,131 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     (ptr, ptr.getByteBuffer(0, size).order(ByteOrder.LITTLE_ENDIAN))
   }
 
-  def listKernParmDesc: Seq[KernelParameterDesc] = _listKernParmDesc
-
-  private var _listKernParmDesc = if (inputArr != null && inputArr.length > 0) {
-    // initFromInputIterator
-    val kernParamDesc = columnsOrder.map { col =>
-      cachedGPUPointers.getOrElseUpdate(blockId.get + col.name, {
-
-        val (hPtr: Pointer, colDataSize: Int) = {
-          var bufferOffset = 0
-          col match {
-            case DataSchema(name, "Array[Double]", length) =>
-              val size: Int = inputArr.length * length * 8
-              val (ptr, buffer) = allocPinnedHeap(size)
-              inputArr.foreach(x => {
-                buffer.position(bufferOffset)
-                buffer.asDoubleBuffer().put(x.asInstanceOf[Array[Double]], 0, length)
-                bufferOffset += length * 8
-                (ptr, size)
-              })
-            case DataSchema(name, "DenseVector[Double]", length) =>
-              val size: Int = inputArr.length * length * 8
-              val (ptr, buffer) = allocPinnedHeap(size)
-              for (i <- 0 until inputArr.length) {
-                val vec = inputArr(i).asInstanceOf[DenseVector].values
-                for (j <- 0 until vec.size) {
-                  buffer.asDoubleBuffer().put(j * inputArr.length + i, vec(j))
-                }
-              }
-//              inputArr.foreach(x => {
-//                buffer.position(bufferOffset)
-//                buffer.asDoubleBuffer().put(x.asInstanceOf[DenseVector[Double]].data, 0, length)
-//                bufferOffset += length * 8
-//                })
-              (ptr, size)
+  def genKernParamDesc(input: Array[_], col: DataSchema): KernelParameterDesc = {
+    val (hPtr: Pointer, colDataSize: Int) = {
+      var bufferOffset = 0
+      col match {
+        case DataSchema(_, "Array[Double]", arraySize) =>
+          val size: Int = inputArr.length * arraySize * DOUBLE_COLUMN.bytes
+          val (ptr, buffer) = allocPinnedHeap(size)
+          input.asInstanceOf[Array[Array[Double]]].foreach( x => {
+            buffer.position(bufferOffset)
+            buffer.asDoubleBuffer().put(x, 0, arraySize)
+            bufferOffset += arraySize * DOUBLE_COLUMN.bytes
+          })
+          (ptr, size)
+        case DataSchema(_, "DenseVector[Double]", arraySize) =>
+          val size: Int = input.length * arraySize * DOUBLE_COLUMN.bytes
+          val (ptr, buffer) = allocPinnedHeap(size)
+          for (i <- 0 until input.length) {
+            val vec = input(i).asInstanceOf[DenseVector].values
+            for (j <- 0 until vec.size) {
+              buffer.asDoubleBuffer().put(j * input.length + i, vec(j))
+            }
           }
-        }
-        val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(colDataSize)
-        // XILI
-        GPUTimer.time (cuMemcpyHtoDAsync(devPtr, hPtr, colDataSize, cuStream),
-          cuStream, "HtoD")
-        // XILI
-        val gPtr = Pointer.to(devPtr)
-
-        // mark the cpuPtr null as we use pinned memory and got the Pointer directly
-        new KernelParameterDesc(null, hPtr, devPtr, gPtr, colDataSize)
-      })
+          (ptr, size)
+        case DataSchema(_, "BrDenseVector[Double]", arraySize) =>
+          val size: Int = input.length * arraySize * DOUBLE_COLUMN.bytes
+          val (ptr, buffer) = allocPinnedHeap(size)
+          for (i <- 0 until input.length) {
+            val vec = input(i).asInstanceOf[BrDenseVector[Double]].data
+            for (j <- 0 until vec.length) {
+              buffer.asDoubleBuffer().put(j * input.length + i, vec(j))
+            }
+          }
+          (ptr, size)
+        case DataSchema(_, "Double", 1) =>
+          val size: Int = input.length * DOUBLE_COLUMN.bytes
+          val (ptr, buffer) = allocPinnedHeap(size)
+          for (i <- 0 until input.length) {
+            val scalar = input(i).asInstanceOf[Double]
+            buffer.asDoubleBuffer().put(i, scalar)
+          }
+          (ptr, size)
+        case DataSchema(_, "Int", 1) =>
+          val size: Int = input.length * INT_COLUMN.bytes
+          val (ptr, buffer) = allocPinnedHeap(size)
+          for (i <- 0 until input.length) {
+            val scalar = input(i).asInstanceOf[Int]
+            buffer.asIntBuffer().put(i, scalar)
+          }
+          (ptr, size)
+      }
     }
-    cuCtxSynchronize()
-    kernParamDesc
-  } else if (numentries != 0) {
+    val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(colDataSize)
+    cuMemcpyHtoDAsync(devPtr, hPtr, colDataSize, _cuStream)
+    val gPtr = Pointer.to(devPtr)
+    new KernelParameterDesc(null, hPtr, devPtr, gPtr, colDataSize)
+  }
+
+  def createInputParmDesc: Seq[KernelParameterDesc] = {
+    val tupleSize = columnsOrder.length
+    val input: Array[_] =
+      if (tupleSize == 1)
+        inputArr.asInstanceOf[Array[_]]
+      else if (tupleSize == 2)
+        inputArr.asInstanceOf[Array[Tuple2[_, _]]]
+      else if (tupleSize == 3)
+        inputArr.asInstanceOf[Array[Tuple3[_, _, _]]]
+      else
+        null
+
+    val kernParamDescSeq =
+      if (tupleSize == 1) {
+        val input = inputArr.asInstanceOf[Array[_]]
+        val col = columnsOrder(0)
+        val kernelParamDesc = cachedGPUPointers.getOrElseUpdate(blockId.get + col.name, {
+          genKernParamDesc(input, col)
+        })
+        Seq(kernelParamDesc)
+      } else if (tupleSize == 2) {
+        val input = inputArr.asInstanceOf[Array[Tuple2[_,_]]]
+        val (col1, col2) = (columnsOrder(0), columnsOrder(1))
+        val (input1, input2) = (input.map(_._1), input.map(_._2))
+        val kernelParameterDesc1 = cachedGPUPointers.getOrElseUpdate(blockId.get + col1.name, {
+          genKernParamDesc(input1, col1)
+        })
+        val kernelParameterDesc2 = cachedGPUPointers.getOrElseUpdate(blockId.get + col2.name, {
+          genKernParamDesc(input2, col2)
+        })
+        Seq(kernelParameterDesc1, kernelParameterDesc2)
+      } else if (tupleSize == 3) {
+        val input = inputArr.asInstanceOf[Array[Tuple3[_,_,_]]]
+        val (col1, col2, col3) = (columnsOrder(0), columnsOrder(1), columnsOrder(2))
+        val (input1, input2, input3) = (input.map(_._1), input.map(_._2), input.map(_._3))
+        val kernelParameterDesc1 = cachedGPUPointers.getOrElseUpdate(blockId.get + col1.name, {
+          genKernParamDesc(input1, col1)
+        })
+        val kernelParameterDesc2 = cachedGPUPointers.getOrElseUpdate(blockId.get + col2.name, {
+          genKernParamDesc(input2, col2)
+        })
+        val kernelParameterDesc3 = cachedGPUPointers.getOrElseUpdate(blockId.get + col3.name, {
+          genKernParamDesc(input3, col3)
+        })
+        Seq(kernelParameterDesc1, kernelParameterDesc2, kernelParameterDesc3)
+      } else {
+        null
+      }
+    kernParamDescSeq
+  }
+
+  def createOutputParmDesc: Seq[KernelParameterDesc] = {
     // initEmptyArrays - mostly used by output argument list
     // set the number of entries to numentries as its initialized to '0'
     _numElements = numentries
     val colOrderSizes = columnsOrder zip _outputArraySizes
-
-    val kernParamDesc = colOrderSizes.map { col =>
+    val seqKernParamDesc = colOrderSizes.map { col =>
       cachedGPUPointers.getOrElseUpdate(blockId.get + col._1.name, {
 
         val colDataSize: Int = col._1 match {
-          case DataSchema(name, "Int", length) => {
+          case DataSchema(name, "Int", length) =>
             numentries * INT_COLUMN.bytes
-          }
-          case DataSchema(name, "Double", length) => {
+          case DataSchema(name, "Double", length) =>
             numentries * DOUBLE_COLUMN.bytes
-          }
-          case DataSchema(name, "Array[Double]", length) => {
-            col._2 * numentries * DOUBLE_COLUMN.bytes
-          }
+          case DataSchema(name, "Array[Double]", length) =>
+            col._1.length * numentries * DOUBLE_COLUMN.bytes
+          case DataSchema(name, "BrDenseVector[Double]", length) =>
+            col._1.length * numentries * DOUBLE_COLUMN.bytes
         }
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(colDataSize)
         cuMemsetD32Async(devPtr, 0, colDataSize / 4, cuStream)
@@ -308,53 +382,97 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
         new KernelParameterDesc(null, null, devPtr, gPtr, colDataSize)
       })
     }
-    cuCtxSynchronize()
-    kernParamDesc
-  } else {
-    null
+    seqKernParamDesc
   }
+
+  def listKernParmDesc: Seq[KernelParameterDesc] = _listKernParmDesc
+
+  private var _listKernParmDesc: Seq[KernelParameterDesc] =
+    if (inputArr != null && inputArr.length > 0) {
+      createInputParmDesc
+    } else if (numentries != 0) {
+      createOutputParmDesc
+    } else {
+      null
+    }
 
   def deserializeColumnValue(columnType: String, cpuArr: Array[_ >: Byte with Short with Int
     with Float with Long with Double <: AnyVal], index: Int, outsize: Int = 0): Any = {
     columnType match {
       case "Int" => cpuArr(index).asInstanceOf[Int]
       case "Double" => cpuArr(index).asInstanceOf[Double]
-      case "Array[Int]" => {
+      case "Array[Int]" =>
         val array = new Array[Int](outsize)
         var runIndex = index
-        for (i <- 0 to outsize - 1) {
+        for (i <- 0 until outsize) {
           array(i) = cpuArr(runIndex).asInstanceOf[Int]
           runIndex += 1
         }
         array
-      }
-      case "Array[Double]" => {
+      case "Array[Double]" =>
         val array = new Array[Double](outsize)
         var runIndex = index
-
-        for (i <- 0 to outsize - 1) {
+        for (i <- 0 until outsize) {
           array(i) = cpuArr(runIndex).asInstanceOf[Double]
           runIndex += 1
         }
         array
-      }
+      case "BrDenseVector[Double]" =>
+        val vector = BrDenseVector.zeros[Double](outsize)
+        var runIndex = index
+        for (i <- 0 until outsize) {
+          vector(i) = cpuArr(runIndex).asInstanceOf[Double]
+          runIndex += numElements
+        }
+        vector
     }
   }
 
   def getResultList: Array[T] = {
-    // XILI
-//    val sw = new StringWriter
-//    new Exception("stacktrace").printStackTrace(new PrintWriter(sw))
-//    // scalastyle:off
-//    println(sw.toString)
-//    // scalastyle:on
-    // XILI
     val resultsArray = new Array[T](numElements)
-    for (index <- 0 to numElements - 1) {
-      resultsArray(index) =
-        (deserializeColumnValue(columnsOrder(0).dataType, listKernParmDesc(0).cpuArr, index),
-         deserializeColumnValue(columnsOrder(1).dataType, listKernParmDesc(1).cpuArr, index)).asInstanceOf[T]
+    if (columnsOrder.length == 1) {
+//      for (index <- 0 until numElements) {
+//        resultsArray(index) =
+//          deserializeColumnValue(columnsOrder(0).dataType, listKernParmDesc(0).cpuArr,
+//            index * columnsOrder(0).length, columnsOrder(0).length).asInstanceOf[T]
+//      }
+      for (index <- 0 until numElements) {
+        resultsArray(index) =
+          deserializeColumnValue(columnsOrder(0).dataType, listKernParmDesc(0).cpuArr,
+            index, columnsOrder(0).length).asInstanceOf[T]
+      }
+    } else {
+      val tupleSize = columnsOrder.length
+      if (tupleSize == 2) {
+        if (columnsOrder(0).dataType == "Int" && columnsOrder(1).dataType == "Double")
+          for (index <- 0 until numElements) {
+            resultsArray(index) = (listKernParmDesc(0).cpuArr(index).asInstanceOf[Int],
+              listKernParmDesc(1).cpuArr(index).asInstanceOf[Double]).asInstanceOf[T]
+          }
+      }
     }
     resultsArray
   }
 }
+
+//trait Foo[T]
+//trait Factory[T] {
+//  def make(input: Array[T]): Foo[T]
+//}
+//object Foo {
+//  def apply[T](input: Array[T])(implicit ev: Factory[T]) = ev.make(input)
+//  private class FooInt[T](input: Array[T]) extends Foo[T] {printf("INT\n")}
+//  private class FooString[T](input: Array[T]) extends Foo[T] {printf("STRING\n")}
+//  private class FooTuple[T](input: Array[T]) extends Foo[T] {printf{"TUPLE\n"}}
+//
+//  implicit val Foo1Fac: Factory[Int] = new Factory[Int] {
+//    override def make(input: Array[Int]): Foo[Int] = new FooInt[Int](input)
+//  }
+//  implicit val Foo2Fac: Factory[String] = new Factory[String] {
+//    override def make(input: Array[String]): Foo[String] = new FooString[String](input)
+//  }
+//  implicit val Foo3Fac: Factory[Tuple3[Int, Int, Double]] = new Factory[Tuple3[Int, Int, Double]] {
+//    override def make(input: Array[Tuple3[Int, Int, Double]]): Foo[Tuple3[Int, Int, Double]] =
+//      new FooTuple[Tuple3[Int, Int, Double]](input)
+//  }
+//}

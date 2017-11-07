@@ -20,8 +20,11 @@ package com.ibm.gpuenabler
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.rdd._
 import org.apache.spark.storage.RDDBlockId
-import org.apache.spark.{Partition, TaskContext, SparkContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
+
+import jcuda.driver.CUstream
+import jcuda.runtime.{JCuda, cudaStream_t}
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -75,6 +78,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
        preservesPartitioning: Boolean = false,
        outputArraySizes: Seq[Int] = null,
        inputFreeVariables: Seq[Any] = null,
+       outputSize: Option[Int] = None,
        mixMode: Boolean = true)
   extends RDD[U](prev) {
 
@@ -85,17 +89,18 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 //  private val inputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[T], "schemaForT")
 //  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
 
-  override def compute(split: Partition, context: TaskContext): Iterator[U] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[U] =
+    CPUIterTimer.time(
+      {
     if (split.index > this.partitions.size * 0.2) {
       println(s"split index == ${split.index}, running on GPU, threadID: ${Thread.currentThread().getId()}")
       // Use the block ID of this particular (rdd, partition)
       val blockId = RDDBlockId(this.id, split.index)
 
       val inputHyIter = CPUIterTimer.time(firstParent[T].iterator(split, context) match {
-        case hyIter: HybridIterator[T] => {
+        case hyIter: HybridIterator[T] =>
           hyIter
-        }
-        case iter: Iterator[T] => {
+        case iter: Iterator[T] =>
           val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
           val parentRDDArray = iter.toArray
 
@@ -105,11 +110,10 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
           val hyIter = new HybridIterator[T](parentRDDArray,
             kernel.inputColumnsOrder, Some(parentBlockId))
           hyIter
-        }
       }, "inputHyIter")
 
       val resultIter = CPUIterTimer.time(
-        kernel.compute[U, T](inputHyIter, None, outputArraySizes, inputFreeVariables, Some(blockId))
+        kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
         , "kernelCompute")
       resultIter
     } else {
@@ -144,7 +148,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
         resultIter
       }
     }
-  }
+  }, "compute")
 }
 
 ///**
@@ -315,6 +319,19 @@ object CUDARDDImplicits {
         extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables, mixMode=mixMode)
     }
 
+    def mapPartitionsExtFunc[U: ClassTag](f: Iterator[T] => Iterator[U],
+                                          extfunc: ExternalFunction,
+                                          outputArraySizes: Seq[Int] = null,
+                                          inputFreeVariables: Seq[Any] = null,
+                                          outputSize: Option[Int] = None,
+                                          mixMode: Boolean = true): RDD[U] = {
+      import org.apache.spark.gpuenabler.CUDAUtils
+      val cleanF = CUDAUtils.cleanFn(sc, f)
+      new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter: Iterator[T]) => cleanF(iter),
+        extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables,
+        outputSize = outputSize, mixMode=mixMode)
+    }
+
 //    /**
 //     * Return a new RDD by applying a function to all elements of this RDD.
 //     */
@@ -350,8 +367,8 @@ object CUDARDDImplicits {
 
       val cleanF = CUDAUtils.cleanFn(sc, f) // sc.clean(f)
 
-      val inputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
-      val outputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
+//      val inputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
+//      val outputColSchema: ColumnPartitionSchema = ColumnPartitionSchema.schemaFor[T]
 
       val reducePartition: (TaskContext, Iterator[T]) => Option[T] =
         (ctx: TaskContext, data: Iterator[T]) => {
