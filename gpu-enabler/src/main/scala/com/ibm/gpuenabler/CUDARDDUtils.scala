@@ -79,7 +79,7 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
        outputArraySizes: Seq[Int] = null,
        inputFreeVariables: Seq[Any] = null,
        outputSize: Option[Int] = None,
-       mixMode: Boolean = true)
+       mixRatio: Float = 0.0f)
   extends RDD[U](prev) {
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
@@ -91,45 +91,19 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     CPUIterTimer.time(
-      {
-    if (split.index > this.partitions.size * 0.2) {
-      println(s"split index == ${split.index}, running on GPU, threadID: ${Thread.currentThread().getId()}")
-      // Use the block ID of this particular (rdd, partition)
-      val blockId = RDDBlockId(this.id, split.index)
-
-      val inputHyIter = CPUIterTimer.time(firstParent[T].iterator(split, context) match {
-        case hyIter: HybridIterator[T] =>
-          hyIter
-        case iter: Iterator[T] =>
-          val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
-          val parentRDDArray = iter.toArray
-
-          if (parentRDDArray.length <= 0)
-            return new Array[U](0).toIterator
-
-          val hyIter = new HybridIterator[T](parentRDDArray,
-            kernel.inputColumnsOrder, Some(parentBlockId))
-          hyIter
-      }, "inputHyIter")
-
-      val resultIter = CPUIterTimer.time(
-        kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
-        , "kernelCompute")
-      resultIter
-    } else {
-      if (mixMode) {
-        println(s"split index == ${split.index}, running on CPU, threadID: ${Thread.currentThread().getId()}")
+    {
+      if (split.index >= this.partitions.size * mixRatio) {
+        println(s"split ${split.index} runs on CPU with threadID ${Thread.currentThread().getId()}")
         CPUIterTimer.time(f(context, split.index, firstParent[T].iterator(split, context)), "cpuCompute")
       } else {
-        println(s"split index == ${split.index}, running on GPU, threadID: ${Thread.currentThread().getId()}")
+        println(s"split ${split.index} runs on GPU with threadID ${Thread.currentThread().getId()}")
         // Use the block ID of this particular (rdd, partition)
         val blockId = RDDBlockId(this.id, split.index)
 
         val inputHyIter = CPUIterTimer.time(firstParent[T].iterator(split, context) match {
-          case hyIter: HybridIterator[T] => {
+          case hyIter: HybridIterator[T] =>
             hyIter
-          }
-          case iter: Iterator[T] => {
+          case iter: Iterator[T] =>
             val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
             val parentRDDArray = iter.toArray
 
@@ -139,16 +113,14 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
             val hyIter = new HybridIterator[T](parentRDDArray,
               kernel.inputColumnsOrder, Some(parentBlockId))
             hyIter
-          }
         }, "inputHyIter")
 
         val resultIter = CPUIterTimer.time(
-          kernel.compute[U, T](inputHyIter, None, outputArraySizes, inputFreeVariables, Some(blockId))
+          kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
           , "kernelCompute")
         resultIter
       }
-    }
-  }, "compute")
+    }, "compute")
 }
 
 ///**
@@ -312,11 +284,11 @@ object CUDARDDImplicits {
     def mapExtFunc[U: ClassTag](f: T => U, extfunc: ExternalFunction,
                                 outputArraySizes: Seq[Int] = null,
                                 inputFreeVariables: Seq[Any] = null,
-                                mixMode: Boolean = true): RDD[U] = {
+                                mixRatio: Float = 1.0f): RDD[U] = {
       import org.apache.spark.gpuenabler.CUDAUtils
       val cleanF = CUDAUtils.cleanFn(sc, f) // sc.clean(f)
       new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter) => iter.map(cleanF),
-        extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables, mixMode=mixMode)
+        extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables, mixRatio=mixRatio)
     }
 
     def mapPartitionsExtFunc[U: ClassTag](f: Iterator[T] => Iterator[U],
@@ -324,12 +296,12 @@ object CUDARDDImplicits {
                                           outputArraySizes: Seq[Int] = null,
                                           inputFreeVariables: Seq[Any] = null,
                                           outputSize: Option[Int] = None,
-                                          mixMode: Boolean = true): RDD[U] = {
+                                          mixRatio: Float = 1.0f): RDD[U] = {
       import org.apache.spark.gpuenabler.CUDAUtils
       val cleanF = CUDAUtils.cleanFn(sc, f)
       new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter: Iterator[T]) => cleanF(iter),
         extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables,
-        outputSize = outputSize, mixMode=mixMode)
+        outputSize = outputSize, mixRatio=mixRatio)
     }
 
 //    /**
