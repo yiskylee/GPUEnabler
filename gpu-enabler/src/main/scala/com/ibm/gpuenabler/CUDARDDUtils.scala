@@ -90,17 +90,17 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 //  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
-    CPUIterTimer.time(
+    GPUTimer.time(
     {
       if (split.index >= this.partitions.size * mixRatio) {
         println(s"split ${split.index} runs on CPU with threadID ${Thread.currentThread().getId()}")
-        CPUIterTimer.time(f(context, split.index, firstParent[T].iterator(split, context)), "cpuCompute")
+        GPUTimer.time(f(context, split.index, firstParent[T].iterator(split, context)), "cpuCompute", split.index)
       } else {
         println(s"split ${split.index} runs on GPU with threadID ${Thread.currentThread().getId()}")
         // Use the block ID of this particular (rdd, partition)
         val blockId = RDDBlockId(this.id, split.index)
 
-        val inputHyIter = CPUIterTimer.time(firstParent[T].iterator(split, context) match {
+        val inputHyIter = GPUTimer.time(firstParent[T].iterator(split, context) match {
           case hyIter: HybridIterator[T] =>
             hyIter
           case iter: Iterator[T] =>
@@ -113,14 +113,14 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
             val hyIter = new HybridIterator[T](parentRDDArray,
               kernel.inputColumnsOrder, Some(parentBlockId))
             hyIter
-        }, "inputHyIter")
+        }, "inputHyIter", split.index)
 
-        val resultIter = CPUIterTimer.time(
+        val resultIter = GPUTimer.time(
           kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
-          , "kernelCompute")
+          , "kernelCompute", split.index)
         resultIter
       }
-    }, "compute")
+    }, "compute", split.index)
 }
 
 ///**

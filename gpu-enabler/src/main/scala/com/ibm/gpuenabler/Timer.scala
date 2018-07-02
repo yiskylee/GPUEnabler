@@ -7,6 +7,23 @@ import scala.collection.mutable.{HashMap, ListBuffer, SortedSet}
 import scala.util.Random
 import java.io._
 
+object GPUTimer {
+  val timer = new TrieMap[String, Long]
+  def time[R](block: => R, name: String, partitionID: Int): R = {
+    val t0 = System.nanoTime()
+    val result = block
+    val t1 = System.nanoTime()
+    timer(name + partitionID) = t1 - t0
+    result
+  }
+  def extract(name: String, partitionID: Int): Long = {
+    val value = timer.getOrElse(name + partitionID, 0L)
+    // Reset
+    timer(name + partitionID) = 0L
+    return value
+  }
+}
+
 object CPUIterTimer {
   // Each element in the list is a timer corresponding to one iteration,
   // each timer contains the name and all (start, end) pairs
