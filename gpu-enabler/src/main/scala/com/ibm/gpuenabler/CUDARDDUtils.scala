@@ -115,6 +115,10 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
             hyIter
         }, "inputHyIter", split.index)
 
+        println(s"${context.taskAttemptId()}, " +
+          GPUTimer.timer.getOrElse("inputHyIter" + split.index, 0L) / 1e9)
+        // XILI
+
         val resultIter = GPUTimer.time(
           kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
           , "kernelCompute", split.index)

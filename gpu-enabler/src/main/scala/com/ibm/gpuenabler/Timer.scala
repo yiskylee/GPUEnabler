@@ -20,7 +20,7 @@ object GPUTimer {
     val value = timer.getOrElse(name + partitionID, 0L)
     // Reset
     timer(name + partitionID) = 0L
-    return value
+    value
   }
 }
 
