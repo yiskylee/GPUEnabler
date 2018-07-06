@@ -89,42 +89,44 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
 //  private val inputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[T], "schemaForT")
 //  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
 
-  override def compute(split: Partition, context: TaskContext): Iterator[U] =
-    GPUTimer.time(
-    {
-      if (split.index >= this.partitions.size * mixRatio) {
-        println(s"split ${split.index} runs on CPU with threadID ${Thread.currentThread().getId()}")
-        GPUTimer.time(f(context, split.index, firstParent[T].iterator(split, context)), "cpuCompute", split.index)
-      } else {
-        println(s"split ${split.index} runs on GPU with threadID ${Thread.currentThread().getId()}")
-        // Use the block ID of this particular (rdd, partition)
-        val blockId = RDDBlockId(this.id, split.index)
+  override def compute(split: Partition, context: TaskContext): Iterator[U] = {
+    val task_metrics = context.taskMetrics()
+    if (split.index >= this.partitions.size * mixRatio) {
+      println(s"split ${split.index} runs on CPU with threadID ${Thread.currentThread().getId()}")
+      f(context, split.index, firstParent[T].iterator(split, context))
+    } else {
+      println(s"split ${split.index} runs on GPU with threadID ${Thread.currentThread().getId()}")
+      // Use the block ID of this particular (rdd, partition)
+      val blockId = RDDBlockId(this.id, split.index)
 
-        val inputHyIter = GPUTimer.time(firstParent[T].iterator(split, context) match {
-          case hyIter: HybridIterator[T] =>
-            hyIter
-          case iter: Iterator[T] =>
-            val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
-            val parentRDDArray = iter.toArray
+      var t0 = System.nanoTime()
+      val inputHyIter = firstParent[T].iterator(split, context) match {
+        case hyIter: HybridIterator[T] =>
+          hyIter
+        case iter: Iterator[T] =>
+          val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
+          val parentRDDArray = iter.toArray
+          if (parentRDDArray.length <= 0)
+            return new Array[U](0).toIterator
 
-            if (parentRDDArray.length <= 0)
-              return new Array[U](0).toIterator
-
-            val hyIter = new HybridIterator[T](parentRDDArray,
-              kernel.inputColumnsOrder, Some(parentBlockId))
-            hyIter
-        }, "inputHyIter", split.index)
-
-        println(s"${context.taskAttemptId()}, " +
-          GPUTimer.timer.getOrElse("inputHyIter" + split.index, 0L) / 1e9)
-        // XILI
-
-        val resultIter = GPUTimer.time(
-          kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
-          , "kernelCompute", split.index)
-        resultIter
+          val hyIter = new HybridIterator[T](parentRDDArray,
+            kernel.inputColumnsOrder, Some(parentBlockId))
+          hyIter
       }
-    }, "compute", split.index)
+      var t1 = System.nanoTime()
+      task_metrics.setExecutorGpuTransferTime(t1 - t0)
+      print(s"TaskID: ${context.taskAttemptId()}, " + s"Trans Time: ${(t1 - t0) / 1e9}, ")
+      // XILI
+
+      t0 = System.nanoTime()
+      val resultIter =
+        kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
+      t1 = System.nanoTime()
+      println(s"Compute Time: ${(t1 - t0) / 1e9}")
+      task_metrics.setExecutorGpuComputeTime(t1 - t0)
+      resultIter
+    }
+  }
 }
 
 ///**
