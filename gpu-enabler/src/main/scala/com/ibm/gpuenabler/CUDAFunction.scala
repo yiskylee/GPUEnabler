@@ -56,9 +56,9 @@ abstract class ExternalFunction extends Serializable {
                                         inputFreeVariables: Seq[Any] = null,
                                         blockId: Option[BlockId] = None) : Iterator[U]
 
-  def inputColumnsOrder(): Seq[DataSchema]
+  def inputColumnsOrder: Seq[DataSchema]
 
-  def outputColumnsOrder(): Seq[DataSchema]
+  def outputColumnsOrder: Seq[DataSchema]
 }
 
 

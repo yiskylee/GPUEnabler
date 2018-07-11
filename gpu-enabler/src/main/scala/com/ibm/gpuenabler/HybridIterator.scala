@@ -454,25 +454,3 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     resultsArray
   }
 }
-
-//trait Foo[T]
-//trait Factory[T] {
-//  def make(input: Array[T]): Foo[T]
-//}
-//object Foo {
-//  def apply[T](input: Array[T])(implicit ev: Factory[T]) = ev.make(input)
-//  private class FooInt[T](input: Array[T]) extends Foo[T] {printf("INT\n")}
-//  private class FooString[T](input: Array[T]) extends Foo[T] {printf("STRING\n")}
-//  private class FooTuple[T](input: Array[T]) extends Foo[T] {printf{"TUPLE\n"}}
-//
-//  implicit val Foo1Fac: Factory[Int] = new Factory[Int] {
-//    override def make(input: Array[Int]): Foo[Int] = new FooInt[Int](input)
-//  }
-//  implicit val Foo2Fac: Factory[String] = new Factory[String] {
-//    override def make(input: Array[String]): Foo[String] = new FooString[String](input)
-//  }
-//  implicit val Foo3Fac: Factory[Tuple3[Int, Int, Double]] = new Factory[Tuple3[Int, Int, Double]] {
-//    override def make(input: Array[Tuple3[Int, Int, Double]]): Foo[Tuple3[Int, Int, Double]] =
-//      new FooTuple[Tuple3[Int, Int, Double]](input)
-//  }
-//}
