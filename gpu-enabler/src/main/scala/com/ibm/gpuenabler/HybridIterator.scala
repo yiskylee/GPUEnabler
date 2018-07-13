@@ -358,7 +358,6 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     val colOrderSizes = columnsOrder zip _outputArraySizes
     val seqKernParamDesc = colOrderSizes.map { col =>
       cachedGPUPointers.getOrElseUpdate(blockId.get + col._1.name, {
-        logInfo(s"key: ${blockId.get + col._1.name} is not cached")
         val colDataSize: Int = col._1 match {
           case DataSchema(name, "Int", length) =>
             numentries * INT_COLUMN.bytes

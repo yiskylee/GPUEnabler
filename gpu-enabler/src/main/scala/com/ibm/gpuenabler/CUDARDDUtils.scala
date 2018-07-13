@@ -30,6 +30,7 @@ import org.apache.spark.gpuenabler.CUDAUtils
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import org.apache.spark.gpuenabler.CUDAUtils
 
 private[gpuenabler] case class Key(val rdd : RDD[Int], key : RDDBlockId)
 
@@ -103,37 +104,30 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       var t1 = 0L
       val inputHyIter = firstParent[T].iterator(split, context) match {
         case hyIter: HybridIterator[T] =>
-          logInfo(s"BlockID: ${blockId} is a hybrid iterator")
+          val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
+          logInfo(s"Parent block: ${parentBlockId} is a hybrid iterator")
           hyIter
         case iter: Iterator[T] =>
           logInfo(s"BlockID: ${blockId} is a regular iterator")
           t0 = System.nanoTime()
           val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
+          logInfo(s"Parent block: ${parentBlockId} is a regular iterator")
           val parentRDDArray = iter.toArray
           if (parentRDDArray.length <= 0)
             return new Array[U](0).toIterator
-
-          val hyIter = new HybridIterator[T](parentRDDArray,
-            kernel.inputColumnsOrder, Some(parentBlockId))
+          val hyIter = new HybridIterator[T](parentRDDArray, kernel.inputColumnsOrder, Some(parentBlockId))
           t1 = System.nanoTime()
           hyIter
       }
 
       task_metrics.incExecutorGpuTransferTime(t1 - t0)
-      logInfo(s"TaskID: ${context.taskAttemptId()}, " + s"Trans Time: ${(t1 - t0) / 1e9}")
-      // XILI
+      logDebug(s"TaskID: ${context.taskAttemptId()}, " + s"Trans Time: ${(t1 - t0) / 1e9}")
 
       t0 = System.nanoTime()
       val resultIter =
         kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
       t1 = System.nanoTime()
-      resultIter match {
-        case hyIter: HybridIterator[U] =>
-          logInfo("resultIter is a hybrid iterator")
-        case iter: Iterator[U] =>
-          logInfo("resultIter is a regular iterator")
-      }
-      //      println(s"TaskID: ${context.taskAttemptId()}, " + s"Comp Time: ${(t1 - t0) / 1e9}")
+      logDebug(s"TaskID: ${context.taskAttemptId()}, " + s"Comp Time: ${(t1 - t0) / 1e9}")
       task_metrics.incExecutorGpuComputeTime(t1 - t0)
       resultIter
     }
