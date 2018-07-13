@@ -14,11 +14,14 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T], val f: T 
 
   override def compute(split: Partition, context: TaskContext) : Iterator[U] = {
     val parentRDDArray = firstParent[T].iterator(split, context).toArray
-    val sampleOutput = f(parentRDDArray(0))
+    val sampleInput = parentRDDArray(0)
+    val sampleOutput = f(sampleInput)
     val numElem = parentRDDArray.length
 
-    inputBuffer = CUDABufferUtils.createInputBuffer(parentRDDArray)
+    inputBuffer = CUDABufferUtils.createInputBufferFor[T](sampleInput, numElem)
     outputBuffer = CUDABufferUtils.createOutputBufferFor[U](sampleOutput, numElem)
+
+
 
     new Iterator[U] {
       def next() : U = {
@@ -33,4 +36,3 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T], val f: T 
   var inputBuffer: InputBufferWrapper[T] = _
   var outputBuffer: OutputBufferWrapper[U] = _
 }
-

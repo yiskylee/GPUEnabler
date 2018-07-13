@@ -4,10 +4,10 @@ import jcuda.Pointer
 
 trait InputBufferWrapper[T] {
 
-  // Return the GPU Pointer of this buffer
-  def getGPUPointer: Pointer
-
-  // Allocate GPU Memory for this buffer and return its pointer on the GPU
-  def allocPinnedMemory: Pointer
+//  // Return the GPU Pointer of this buffer
+//  def getGPUPointer: Pointer
+//
+//  // Allocate GPU Memory for this buffer and return its pointer on the GPU
+//  def allocPinnedMemory: Pointer
 
 }
