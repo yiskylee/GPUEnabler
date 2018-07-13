@@ -9,6 +9,9 @@ import scala.reflect.ClassTag
 class Tuple2OutputBufferWrapper[K: ClassTag, V: ClassTag](sample: Tuple2[K, V], numTuples: Int)
   extends OutputBufferWrapper[Tuple2[K, V]] {
 
+  val buffer1: OutputBufferWrapper[K] = CUDABufferUtils.createOutputBufferFor[K](sample._1, numTuples)
+  val buffer2: OutputBufferWrapper[V] = CUDABufferUtils.createOutputBufferFor[V](sample._2, numTuples)
+
 //  val outputBuffer0: OutputBufferWrapper[K] = CUDABufferUtils.createOutputBufferFor[K]()
 
   private var gpuPtr: Option[Pointer] = None
