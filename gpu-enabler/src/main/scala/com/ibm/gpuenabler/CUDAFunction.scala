@@ -277,10 +277,7 @@ class CUDAFunction( val funcNames: Seq[String],
     cuLaunchKernel(function,
       grid.x, grid.y, grid.z, // how many blocks
       block.x, block.y, block.z, // threads per block (eg. 1024)
-      sharedMemSize match {
-        case None => 0
-        case Some(sharedMemSize) => sharedMemSize
-      }, cuStream, // Shared memory size and stream
+      sharedMemSize.getOrElse(0), cuStream, // Shared memory size and stream
       kernelParameters, null // Kernel- and extra parameters
     )
   }
@@ -292,12 +289,12 @@ class CUDAFunction( val funcNames: Seq[String],
         val sz = nToLength(numElem) * INT_COLUMN.bytes
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
         cuMemsetD32Async(devPtr, 0, sz/4, cuStream)
-        new TempBufferParamDesc(devPtr, Pointer.to(devPtr), sz)
+        TempBufferParamDesc(devPtr, Pointer.to(devPtr), sz)
       case TempBuffer(name, "Array[Double]", nToLength, mode) =>
         val sz = nToLength(numElem) * DOUBLE_COLUMN.bytes
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
         cuMemsetD32Async(devPtr, 0, sz/4, cuStream)
-        new TempBufferParamDesc(devPtr, Pointer.to(devPtr), sz)
+        TempBufferParamDesc(devPtr, Pointer.to(devPtr), sz)
     }
   }
 
@@ -343,7 +340,7 @@ class CUDAFunction( val funcNames: Seq[String],
       case h if h.isInstanceOf[Array[Vector]] => {
         val arr = h.asInstanceOf[Array[Vector]].map(v => v.toArray).
           reduce((a, b) => a ++ b)
-        val sz = arr.size * DOUBLE_COLUMN.bytes
+        val sz = arr.length * DOUBLE_COLUMN.bytes
         val devPtr = GPUSparkEnv.get.cudaManager.allocateGPUMemory(sz)
         cuMemcpyHtoDAsync(devPtr, Pointer.to(arr), sz, cuStream)
         (arr, Pointer.to(arr), devPtr, Pointer.to(devPtr), sz)
@@ -541,8 +538,8 @@ class CUDAFunction( val funcNames: Seq[String],
     })
     listDevPtr = List()
 
-    outputHyIter.freeGPUMemory
-    inputHyIter.freeGPUMemory
+    outputHyIter.freeGPUMemory()
+    inputHyIter.freeGPUMemory()
 
     outputHyIter.asInstanceOf[Iterator[U]]
   }

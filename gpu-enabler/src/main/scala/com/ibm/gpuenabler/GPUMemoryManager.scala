@@ -121,8 +121,6 @@ private[gpuenabler] class GPUMemoryManager(val executorId : String,
     tell(com.ibm.gpuenabler.RegisterGPUMemoryManager(executorId, slaveEndpoint))
   }
 
-
-
   def unCacheGPU(rddId : Int): Unit = {
     cachedGPURDDs -= rddId
     for ((name, ptr) <- cachedGPUPointers) {
