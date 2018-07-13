@@ -24,10 +24,10 @@ import jcuda.driver.JCudaDriver._
 import jcuda.driver.{CUdeviceptr, CUresult, CUstream}
 import jcuda.runtime.{JCuda, cudaStream_t}
 import jcuda.{CudaException, Pointer}
-
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.RDDBlockId
 import breeze.linalg.{DenseVector => BrDenseVector}
+import org.apache.spark.gpuenabler.CUDAUtils
 import org.apache.spark.mllib.linalg.DenseVector
 
 import scala.collection.mutable.ArrayBuffer
@@ -36,8 +36,7 @@ import scala.reflect.ClassTag
 import scala.collection.mutable.HashMap
 
 // scalastyle:off no.finalize
-private[gpuenabler] case class KernelParameterDesc(
-                                                    cpuArr: Array[_ >: Byte with Short with Int
+private[gpuenabler] case class KernelParameterDesc(cpuArr: Array[_ >: Byte with Short with Int
                                                       with Float with Long with Double <: AnyVal],
                                                     cpuPtr: Pointer,
                                                     devPtr: CUdeviceptr,
@@ -50,7 +49,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
                                                       cuStream: CUstream = null,
                                                       numentries: Int = 0,
                                                       outputArraySizes: Seq[Int] = null
-                                                     ) extends Iterator[T] {
+                                                     ) extends Iterator[T] with CUDAUtils._Logging {
 
   private var _arr: Array[T] = inputArr
 
@@ -85,21 +84,22 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     new CUstream(stream)
   }
 
-  var _numElements = if (inputArr != null) inputArr.length else 0
+  var _numElements: Int = if (inputArr != null) inputArr.length else 0
   var idx: Int = -1
 
   val blockId: Option[BlockId] = _blockId match {
     case Some(x) => _blockId
-    case None => {
+    case None =>
       val r = scala.util.Random
       Some(RDDBlockId(r.nextInt(99999), r.nextInt(99999)))
-    }
   }
 
-  def rddId: Int = blockId.getOrElse(RDDBlockId(0, 0)).asRDDId.get.rddId
+  def rddId: Int = _blockId.getOrElse(RDDBlockId(0, 0)).asRDDId.get.rddId
 
   def cachedGPUPointers: HashMap[String, KernelParameterDesc] =
     GPUSparkEnv.get.gpuMemoryManager.getCachedGPUPointers
+
+  private def gpuCache: Boolean = GPUSparkEnv.get.gpuMemoryManager.cachedGPURDDs.contains(rddId)
 
   def numElements: Int = _numElements
 
@@ -112,33 +112,27 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     arr(idx)
   }
 
-  def getCuStream = _cuStream
-
-  private def gpuCache: Boolean = GPUSparkEnv.get.gpuMemoryManager.cachedGPURDDs.contains(rddId)
+  def getCuStream: CUstream = _cuStream
 
   // Function to free the allocated GPU memory if the RDD is not cached.
-  def freeGPUMemory: Unit = {
+  def freeGPUMemory(): Unit = {
     if (!gpuCache) {
       // Make sure the CPU ptrs are populated before GPU memory is freed up.
       copyGpuToCpu
       if (_listKernParmDesc == null) return
       _listKernParmDesc = _listKernParmDesc.map(kpd => {
         if (kpd.devPtr != null) {
-//          if (columnsOrder(0).name == "costs") {
-//            println("costs not cached and kpd.devPtr is not null")
-//          }
           GPUSparkEnv.get.cudaManager.freeGPUMemory(kpd.devPtr)
-//          if (columnsOrder(0).name == "costs") {
-//            if (kpd.devPtr == null)
-//              println("kpd.devPtr is null after freeGPUMemory")
-//            else
-//              println("kpd.devPtr is not null after freeGPUMemory")
-//          }
         }
         KernelParameterDesc(kpd.cpuArr, kpd.cpuPtr, null, null, kpd.sz)
       })
+
+      for (name <- cachedGPUPointers.keys if name.startsWith(blockId.get.toString))
+        logInfo(s"$name is removed from cachedGPUPointers")
+
       cachedGPUPointers.retain(
         (name, kernelParameterDesc) => !name.startsWith(blockId.get.toString))
+
     }
   }
 
@@ -150,7 +144,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
   // This function is used to copy the CPU memory to GPU for
   // an existing Hybrid Iterator
-  def copyCpuToGpu: Unit = {
+  def copyCpuToGpu(): Unit = {
     if (_listKernParmDesc == null) return
     _listKernParmDesc = _listKernParmDesc.map(kpd => {
       if (kpd.devPtr == null) {
@@ -364,7 +358,7 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
     val colOrderSizes = columnsOrder zip _outputArraySizes
     val seqKernParamDesc = colOrderSizes.map { col =>
       cachedGPUPointers.getOrElseUpdate(blockId.get + col._1.name, {
-
+        logInfo(s"key: ${blockId.get + col._1.name} is not cached")
         val colDataSize: Int = col._1 match {
           case DataSchema(name, "Int", length) =>
             numentries * INT_COLUMN.bytes

@@ -202,7 +202,6 @@ object CPUIterTimer {
   }
 
   def outputIterTime(): Unit = {
-    println("In outputIterTimer")
     val pw = new PrintWriter(new File("Profiling.csv" ))
     if (!timerList(0).isEmpty) {
       for ((name, index) <- timerNames.zipWithIndex) {

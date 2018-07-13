@@ -26,6 +26,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter
 
 import jcuda.driver.CUstream
 import jcuda.runtime.{JCuda, cudaStream_t}
+import org.apache.spark.gpuenabler.CUDAUtils
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -81,15 +82,12 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
        inputFreeVariables: Seq[Any] = null,
        outputSize: Option[Int] = None,
        mixRatio: Float = 0.0f)
-  extends RDD[U](prev) {
+  extends RDD[U](prev) with CUDAUtils._Logging {
 
   override val partitioner: Option[Partitioner] =
     if (preservesPartitioning) firstParent[T].partitioner else None
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
-
-//  private val inputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[T], "schemaForT")
-//  private val outputColSchema: ColumnPartitionSchema = CPUTimer.accumuTime(ColumnPartitionSchema.schemaFor[U], "schemaForU")
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
     val task_metrics = context.taskMetrics()
@@ -105,8 +103,10 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       var t1 = 0L
       val inputHyIter = firstParent[T].iterator(split, context) match {
         case hyIter: HybridIterator[T] =>
+          logInfo(s"BlockID: ${blockId} is a hybrid iterator")
           hyIter
         case iter: Iterator[T] =>
+          logInfo(s"BlockID: ${blockId} is a regular iterator")
           t0 = System.nanoTime()
           val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
           val parentRDDArray = iter.toArray
@@ -120,14 +120,20 @@ private[gpuenabler] class MapGPUPartitionsRDD[U: ClassTag, T: ClassTag](
       }
 
       task_metrics.incExecutorGpuTransferTime(t1 - t0)
-//      println(s"TaskID: ${context.taskAttemptId()}, " + s"Trans Time: ${(t1 - t0) / 1e9}")
+      logInfo(s"TaskID: ${context.taskAttemptId()}, " + s"Trans Time: ${(t1 - t0) / 1e9}")
       // XILI
 
       t0 = System.nanoTime()
       val resultIter =
         kernel.compute[U, T](inputHyIter, outputSize, outputArraySizes, inputFreeVariables, Some(blockId))
       t1 = System.nanoTime()
-//      println(s"TaskID: ${context.taskAttemptId()}, " + s"Comp Time: ${(t1 - t0) / 1e9}")
+      resultIter match {
+        case hyIter: HybridIterator[U] =>
+          logInfo("resultIter is a hybrid iterator")
+        case iter: Iterator[U] =>
+          logInfo("resultIter is a regular iterator")
+      }
+      //      println(s"TaskID: ${context.taskAttemptId()}, " + s"Comp Time: ${(t1 - t0) / 1e9}")
       task_metrics.incExecutorGpuComputeTime(t1 - t0)
       resultIter
     }
@@ -253,7 +259,7 @@ object CUDARDDImplicits {
   implicit class CUDARDDFuncs[T: ClassTag](rdd: RDD[T])
     extends Serializable {
 
-    def sc = rdd.sparkContext
+    def sc: SparkContext = rdd.sparkContext
 
     /**
       * This function is used to mark the respective RDD's data to
@@ -264,7 +270,7 @@ object CUDARDDImplicits {
       * be achieved as data movement between CPU memory and GPU 
       * memory is considered costly.
       */
-    def cacheGpu() = {
+    def cacheGpu(): RDD[T] = {
       GPUSparkEnv.get.gpuMemoryManager.cacheGPUSlaves(rdd.id); rdd
     }
 
@@ -272,7 +278,7 @@ object CUDARDDImplicits {
       * This function is used to clean up all the caches in GPU held
       * by the respective RDD on the various partitions.
       */
-    def unCacheGpu() = {
+    def unCacheGpu(): RDD[T] = {
       GPUSparkEnv.get.gpuMemoryManager.unCacheGPUSlaves(rdd.id); rdd
     }
 
@@ -313,6 +319,13 @@ object CUDARDDImplicits {
       new MapGPUPartitionsRDD[U, T](rdd, (context, pid, iter: Iterator[T]) => cleanF(iter),
         extfunc, outputArraySizes = outputArraySizes, inputFreeVariables = inputFreeVariables,
         outputSize = outputSize, mixRatio=mixRatio)
+    }
+
+    def mapCUDA[U: ClassTag](f: T => U): RDD[U] = {
+      import org.apache.spark.gpuenabler.CUDAUtils
+      val cleanF = CUDAUtils.cleanFn(sc, f)
+      new MapCUDAPartitionsRDD(rdd, cleanF)
+//      new MapCUDAPartitionsRDD(rdd, cleanF, extfunc: CUDAFunction2)
     }
 
 //    /**
@@ -379,7 +392,7 @@ object CUDARDDImplicits {
           }
         }
       }
-      sc.runJob(rdd, reducePartition, 0 until rdd.partitions.length, mergeResult)
+      sc.runJob(rdd, reducePartition, rdd.partitions.indices, mergeResult)
       jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
     }
 
