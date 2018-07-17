@@ -239,17 +239,6 @@ class CUDAFunction( val funcNames: Seq[String],
     case resourceURL: URL =>
       resourceURL
   }
-//  val ptxmodule = resourceURL match {
-//    case resourceURL: URL =>
-//      (resourceURL.toString, {
-//        val inputStream = resourceURL.openStream()
-//        val moduleBinaryData = IOUtils.toByteArray(inputStream)
-//        inputStream.close()
-//        new String(moduleBinaryData.map(_.toChar))
-//      })
-//    case (name: String, ptx: String) => (name, ptx)
-//    case _ => throw new UnsupportedOperationException("this type is not supported for module")
-//  }
 
   // asynchronous Launch of kernel
   private def launchKernel(function: CUfunction, numElements: Int,
@@ -262,16 +251,6 @@ class CUDAFunction( val funcNames: Seq[String],
       case Some(computeDim) => computeDim(numElements, stageNumber)
       case None => GPUSparkEnv.get.cudaManager.computeDimensions(numElements)
     }
-//    println(s"gpuGridSize: ${grid}, gpuBlockSize: ${block}")
-
-//    val numChunks = (numElements + gpuBlockSize - 1) / gpuBlockSize
-//    val gpuGridSize = (numChunks + pointsPerThread - 1) / pointsPerThread
-
-    //    // XILI
-    //    val sw = new StringWriter
-    //    new Exception("stacktrace").printStackTrace(new PrintWriter(sw))
-    //    println(sw.toString)
-    //    // XILI
     cuLaunchKernel(function,
       grid.x, grid.y, grid.z, // how many blocks
       block.x, block.y, block.z, // threads per block (eg. 1024)
@@ -543,4 +522,33 @@ class CUDAFunction( val funcNames: Seq[String],
   }
 }
 
-//class CUDAFucntion2(val funcNames: Seq[String], val resourceURL: Any,
+class CUDAFunction2(val funcNames: Seq[String],
+                    val resourceURL: URL,
+                    val params: Seq[Param],
+                    val dimensions: (dim3, dim3)) {
+
+  // touch GPUSparkEnv for endpoint init
+  GPUSparkEnv.get
+
+  val module = GPUSparkEnv.get.cudaManager.cachedLoadModule(Left(resourceURL))
+  val functions: Seq[CUfunction] = funcNames.map {funcName =>
+    val function = new CUfunction
+    cuModuleGetFunction(function, module, funcName)
+    function
+  }
+
+  def compute[U: ClassTag, T: ClassTag](input: InputBufferWrapper[T],
+                                        output: OutputBufferWrapper[U],
+                                        constArgs: Seq[AnyVal],
+                                        freeArgs: Seq[Any]): Unit = {
+    params.foreach {
+      case param: InputParam =>
+
+      }
+  }
+
+
+
+}
+
+

@@ -315,11 +315,12 @@ object CUDARDDImplicits {
         outputSize = outputSize, mixRatio=mixRatio)
     }
 
-    def mapCUDA[U: ClassTag](f: T => U): RDD[U] = {
+    def mapCUDA[U: ClassTag](f: T => U, cudaFunc: CUDAFunction2,
+                             constArgs: Seq[AnyVal] = Seq(),
+                             freeArgs: Seq[Array[_]] = Seq()): RDD[U] = {
       import org.apache.spark.gpuenabler.CUDAUtils
       val cleanF = CUDAUtils.cleanFn(sc, f)
-      new MapCUDAPartitionsRDD(rdd, cleanF)
-//      new MapCUDAPartitionsRDD(rdd, cleanF, extfunc: CUDAFunction2)
+      new MapCUDAPartitionsRDD(rdd, cleanF, cudaFunc, constArgs, freeArgs)
     }
 
 //    /**

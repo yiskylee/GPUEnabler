@@ -5,13 +5,15 @@ import org.apache.spark.mllib.linalg.DenseVector
 import scala.reflect.ClassTag
 
 object CUDABufferUtils {
-  def createInputBufferFor[T: ClassTag](sampleInput: T, numElem: Int): InputBufferWrapper[T] = {
+  def createInputBufferFor[T: ClassTag](inputArray: Array[T]): InputBufferWrapper[T] = {
+    val sampleInput = inputArray(0)
+    val numElem = inputArray.length
     sampleInput match {
       case _: DenseVector =>
-        new DenseVectorInputBufferWrapper(numElem, sampleInput.asInstanceOf[DenseVector].size).
+        new DenseVectorInputBufferWrapper(inputArray.asInstanceOf[Array[DenseVector]]).
           asInstanceOf[InputBufferWrapper[T]]
       case _: Tuple2[_, _] =>
-        new Tuple2InputBufferWrapper(sampleInput.asInstanceOf[(_, _)], numElem).
+        new Tuple2InputBufferWrapper(inputArray.asInstanceOf[Array[Tuple2[_, _]]])
           asInstanceOf[InputBufferWrapper[T]]
 
     }

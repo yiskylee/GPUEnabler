@@ -20,11 +20,9 @@ package com.ibm.gpuenabler
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.gpuenabler.CUDAUtils
-import org.apache.spark.util.Utils
 
 import scala.collection.immutable.HashMap
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe
 import scala.reflect.runtime.universe.{TermSymbol, Type, typeOf}
 
 // Some code taken from org.apache.spark.sql.catalyst.ScalaReflection
@@ -34,10 +32,25 @@ private[gpuenabler] abstract class PartitionFormat
 private[gpuenabler] case object ColumnFormat extends PartitionFormat
 
 
-case class DataSchema(val name: String, val dataType: String, val length: Int)
+case class DataSchema(name: String, dataType: String, length: Int)
 
-case class TempBuffer(val name: String, val dataType: String, val size: Int => Int, val mode: String)
+case class TempBuffer(name: String, dataType: String, size: Int => Int, mode: String)
 
+
+abstract class Param
+case class InputParam(name: String,
+                      memType: String = "global",
+                      cacheType: String = "cache",
+                      transpose: Boolean = false) extends Param
+case class OutputParam(name: String,
+                       memType: String = "global",
+                       cacheType: String = "keep_alloc") extends Param
+case class FreeParam(name: String,
+                     memType: String = "global",
+                     cacheType: String = "keep_alloc",
+                     transpose: Boolean = false) extends Param
+case class ConstParam(name: String) extends Param
+case class SizeDepParam(name: String) extends Param
 
 private[gpuenabler] object ColumnPartitionSchema {
 
