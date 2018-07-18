@@ -6,7 +6,7 @@ import scala.reflect.ClassTag
 
 class PrimitiveOutputBufferWrapper[T: ClassTag](sample: T, numElems: Int, elemSize: Int)
   extends OutputBufferWrapper[T] {
-  override var size: Option[Int] = Some(numElems * elemSize)
+  size = Some(numElems * elemSize)
   override def gpuToCpu(stream: cudaStream_t): Unit = {
     sample match {
       case _: Int =>
@@ -28,7 +28,7 @@ class PrimitiveOutputBufferWrapper[T: ClassTag](sample: T, numElems: Int, elemSi
           cudaMemcpyKind.cudaMemcpyDeviceToHost, stream)
         outputArray = Some(rawArray.asInstanceOf[Array[T]])
       case _ =>
-        System.err("Does not support this primitive type")
+        System.err.println("Does not support this primitive type")
         System.exit(1)
     }
   }

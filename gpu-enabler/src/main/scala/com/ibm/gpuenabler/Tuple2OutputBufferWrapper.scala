@@ -12,10 +12,8 @@ class Tuple2OutputBufferWrapper[K: ClassTag, V: ClassTag](sample: Tuple2[K, V], 
   val buffer1: OutputBufferWrapper[K] = CUDABufferUtils.createOutputBufferFor[K](sample._1, numTuples)
   val buffer2: OutputBufferWrapper[V] = CUDABufferUtils.createOutputBufferFor[V](sample._2, numTuples)
 
-  override var outputArray: Option[Array[Tuple2[K, V]]] = None
-
   override def getKernelParams: Seq[Pointer] = {
-    List(buffer1.gpuPtr.get, buffer2.gpuPtr.get)
+    List(buffer1.getGpuPtr, buffer2.getGpuPtr)
   }
 
   override def allocGPUMem(): Unit = {
@@ -26,7 +24,7 @@ class Tuple2OutputBufferWrapper[K: ClassTag, V: ClassTag](sample: Tuple2[K, V], 
   override def gpuToCpu(stream: cudaStream_t): Unit = {
     buffer1.gpuToCpu(stream)
     buffer2.gpuToCpu(stream)
-    val zipped = buffer1.outputArray.get zip buffer2.outputArray.get
+    val zipped = buffer1.getOutputArray zip buffer2.getOutputArray
     outputArray = Some(zipped)
   }
 }

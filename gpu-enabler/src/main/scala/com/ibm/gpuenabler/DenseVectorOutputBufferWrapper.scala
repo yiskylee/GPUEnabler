@@ -11,10 +11,9 @@ import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 class DenseVectorOutputBufferWrapper(numVectors: Int, vecSize: Int)
   extends OutputBufferWrapper[DenseVector] {
 
-  override var size: Option[Int] = Some(numVectors * vecSize * 8)
+  size = Some(numVectors * vecSize * 8)
   var rawArray: Array[Double] = new Array[Double](size.get)
-  override var cpuPtr: Option[Pointer] = Some(Pointer.to(rawArray))
-  override var outputArray: Option[Array[DenseVector]] = None
+  cpuPtr = Some(Pointer.to(rawArray))
 
   override def gpuToCpu(stream: cudaStream_t): Unit = {
     JCuda.cudaMemcpyAsync(cpuPtr.get, gpuPtr.get, size.get,

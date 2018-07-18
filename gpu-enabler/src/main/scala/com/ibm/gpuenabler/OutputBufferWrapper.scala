@@ -12,7 +12,7 @@ trait OutputBufferWrapper[T] {
   protected var outputArray: Option[Array[T]] = None
   protected var size: Option[Int] = None
 
-  def next: T = outputArray(idx)
+  def next: T = outputArray.get(idx)
 
   def hasNext: Boolean = idx < outputArray.get.length
 
@@ -23,6 +23,10 @@ trait OutputBufferWrapper[T] {
   }
 
   def getSize: Int = size.get
+
+  def getGpuPtr: Pointer = gpuPtr.get
+
+  def getOutputArray: Array[T] = outputArray.get
 
   // Copy data from GPU to CPU
   def gpuToCpu(stream: cudaStream_t): Unit

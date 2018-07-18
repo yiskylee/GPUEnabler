@@ -53,7 +53,7 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
           } else {
             // The output buffer used in the last iteration has a different size as the incoming one
             // Might be caused by different partitions
-            System.err(s"Existing output buffer's size is ${existingBuffer.getSize} " +
+            System.err.println(s"Existing output buffer's size is ${existingBuffer.getSize}" +
               s"while the requested size is ${buffer.getSize}")
             existingBuffer.freeGPUMem()
             existingBuffer.freeCPUMem()

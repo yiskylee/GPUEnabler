@@ -5,20 +5,29 @@ import jcuda.runtime.{JCuda, cudaMemcpyKind}
 
 import scala.reflect.ClassTag
 
-class PrimitiveInputBufferWrapper[T: ClassTag](inputArray: Array[T], elemSize: Int)
+class PrimitiveInputBufferWrapper[T: ClassTag](sample: T)
   extends InputBufferWrapper[T] {
-  private val _numElems = inputArray.length
-  override var size: Option[Int] = Some(_numElems * elemSize)
-
+  private var _inputArray: Option[Array[T]] = None
+  private var _elemSize: Option[Int] = None
   override def cpuToGpu(transpose: Boolean): Unit = {
-
     val buffer = cpuPtr.get.getByteBuffer(0, size.get).order(ByteOrder.LITTLE_ENDIAN)
-    inputArray(0) match {
-      case _: Int => buffer.asIntBuffer().put(inputArray.asInstanceOf[Array[Int]])
-      case _: Float => buffer.asFloatBuffer().put(inputArray.asInstanceOf[Array[Float]])
-      case _: Double => buffer.asDoubleBuffer().put(inputArray.asInstanceOf[Array[Double]])
+    _inputArray.get(0) match {
+      case _: Int =>
+        buffer.asIntBuffer().put(_inputArray.asInstanceOf[Array[Int]])
+        _elemSize = Some(4)
+      case _: Float =>
+        buffer.asFloatBuffer().put(_inputArray.asInstanceOf[Array[Float]])
+        _elemSize = Some(4)
+      case _: Double =>
+        buffer.asDoubleBuffer().put(_inputArray.asInstanceOf[Array[Double]])
+        _elemSize = Some(8)
     }
     JCuda.cudaMemcpyAsync(gpuPtr.get, cpuPtr.get, size.get,
       cudaMemcpyKind.cudaMemcpyHostToDevice, stream)
+  }
+
+  override def readFrom(iter: Iterator[T]): Unit = {
+    _inputArray = Some(iter.toArray)
+    size = Some(_elemSize.get * _inputArray.get.length)
   }
 }

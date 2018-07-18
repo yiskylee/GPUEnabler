@@ -5,7 +5,6 @@ import jcuda.{CudaException, Pointer}
 import jcuda.runtime.{JCuda, cudaMemcpyKind, cudaStream_t}
 
 trait InputBufferWrapper[T] {
-
   protected var gpuPtr: Option[Pointer] = None
   protected var cpuPtr: Option[Pointer] = None
   protected var size: Option[Int] = None
@@ -31,7 +30,11 @@ trait InputBufferWrapper[T] {
     gpuPtr = Some(CUDABufferUtils.allocGPUMem(size.get))
   }
 
+  def readFrom(iter: Iterator[T]): Unit
+
   def getSize: Int = size.get
+
+  def getGpuPtr: Pointer = gpuPtr.get
 
   // Copy data from CPU to GPU
   def cpuToGpu(transpose: Boolean): Unit

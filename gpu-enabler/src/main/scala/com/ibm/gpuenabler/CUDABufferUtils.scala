@@ -12,20 +12,20 @@ object CUDABufferUtils {
     val sampleInput = inputArray(0)
     val numElem = inputArray.length
     sampleInput match {
-      case _: DenseVector =>
-        new DenseVectorInputBufferWrapper(inputArray.asInstanceOf[Array[DenseVector]]).
-          asInstanceOf[InputBufferWrapper[T]]
-      case _: Tuple2[_, _] =>
-        new Tuple2InputBufferWrapper(inputArray.asInstanceOf[Array[Tuple2[_, _]]]).
-          asInstanceOf[InputBufferWrapper[T]]
+//      case _: DenseVector =>
+//        new DenseVectorInputBufferWrapper(inputArray.asInstanceOf[Array[DenseVector]]).
+//          asInstanceOf[InputBufferWrapper[T]]
+//      case _: Tuple2[_, _] =>
+//        new Tuple2InputBufferWrapper(inputArray.asInstanceOf[Array[Tuple2[_, _]]]).
+//          asInstanceOf[InputBufferWrapper[T]]
       case _ : Int =>
-        new PrimitiveInputBufferWrapper[Int](inputArray.asInstanceOf[Array[Int]], 4).
+        new PrimitiveInputBufferWrapper[Int](sampleInput.asInstanceOf[Int]).
           asInstanceOf[InputBufferWrapper[T]]
       case _ : Float =>
-        new PrimitiveInputBufferWrapper[Float](inputArray.asInstanceOf[Array[Float]], 4).
+        new PrimitiveInputBufferWrapper[Float](sampleInput.asInstanceOf[Float]).
           asInstanceOf[InputBufferWrapper[T]]
       case _ : Double =>
-        new PrimitiveInputBufferWrapper[Double](inputArray.asInstanceOf[Array[Double]], 8).
+        new PrimitiveInputBufferWrapper[Double](sampleInput.asInstanceOf[Double]).
           asInstanceOf[InputBufferWrapper[T]]
     }
   }

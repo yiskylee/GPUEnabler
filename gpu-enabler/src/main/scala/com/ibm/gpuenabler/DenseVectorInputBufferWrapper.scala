@@ -15,7 +15,7 @@ class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector])
 
   private val _numVectors = inputArray.length
   private val _vecSize = inputArray(0).size
-  override var size: Option[Int] = Some(_numVectors * _vecSize * 8)
+  size = Some(_numVectors * _vecSize * 8)
 
   override def cpuToGpu(transpose: Boolean): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, size.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
@@ -34,5 +34,9 @@ class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector])
     }
     JCuda.cudaMemcpyAsync(gpuPtr.get, cpuPtr.get, size.get,
       cudaMemcpyKind.cudaMemcpyHostToDevice, stream)
+  }
+
+  override def readFrom(iter: Iterator[DenseVector]): Unit = {
+
   }
 }

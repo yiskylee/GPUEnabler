@@ -11,7 +11,7 @@ class Tuple2InputBufferWrapper[K: ClassTag, V: ClassTag] (inputArray: Array[Tupl
   val buffer2: InputBufferWrapper[V] = CUDABufferUtils.createInputBufferFor[V](inputArray.map(_._2))
 
   override def getKernelParams: Seq[Pointer] = {
-    List(buffer1.gpuPtr.get, buffer2.gpuPtr.get)
+    List(buffer1.getGpuPtr, buffer2.getGpuPtr)
   }
 
   override def allocCPUPinnedMem(): Unit = {
@@ -27,5 +27,9 @@ class Tuple2InputBufferWrapper[K: ClassTag, V: ClassTag] (inputArray: Array[Tupl
   override def cpuToGpu(transpose: Boolean): Unit = {
     buffer1.cpuToGpu(transpose)
     buffer2.cpuToGpu(transpose)
+  }
+
+  override def readFrom(iter: Iterator[(K, V)]): Unit = {
+
   }
 }
