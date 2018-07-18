@@ -1,37 +1,38 @@
 package com.ibm.gpuenabler
 
-import jcuda.driver.CUresult
+import jcuda.driver.{CUresult, CUstream}
 import jcuda.{CudaException, Pointer}
-import jcuda.runtime.JCuda
+import jcuda.runtime.{JCuda, cudaMemcpyKind, cudaStream_t}
 
-abstract class InputBufferWrapper[T] {
+trait InputBufferWrapper[T] {
 
-  val size: Int
   protected var gpuPtr: Option[Pointer] = None
-
-  // Return the GPU Pointer of this buffer
-  def getGPUPointer: Option[Pointer] = gpuPtr
-
-  // Return the size of GPU allocation
-  def getSize: Int = size
-
-  // Allocate GPU Memory for this buffer and return its pointer on the GPU
-  def allocGPUMem(): Unit = {
-    val ptr = new Pointer()
-    try {
-      val result: Int = JCuda.cudaHostAlloc(ptr, size, JCuda.cudaHostAllocPortable)
-      if (result != CUresult.CUDA_SUCCESS) {
-        throw new CudaException(JCuda.cudaGetErrorString(result))
-      }
-    }
-    catch {
-      case ex: Exception =>
-        throw new OutOfMemoryError("Could not alloc pinned memory: " + ex.getMessage)
-    }
-    gpuPtr = Some(ptr)
+  protected var cpuPtr: Option[Pointer] = None
+  protected var size: Option[Int] = None
+  protected val stream: cudaStream_t = {
+    val stream = new cudaStream_t
+    JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
+    stream
   }
 
-  // Copy data from CPU to GPU
-  def copyToGPUMem(memType: String, transpose: Boolean): Unit
+  protected val cuStream: CUstream = new CUstream(stream)
 
+  def getStream: cudaStream_t = stream
+
+  def getCuStream: CUstream = cuStream
+
+  def getKernelParams: Seq[Pointer] = List(gpuPtr.get)
+
+  def allocCPUPinnedMem(): Unit = {
+    cpuPtr = Some(CUDABufferUtils.allocCPUPinnedMem(size.get))
+  }
+
+  def allocGPUMem(): Unit = {
+    gpuPtr = Some(CUDABufferUtils.allocGPUMem(size.get))
+  }
+
+  def getSize: Int = size.get
+
+  // Copy data from CPU to GPU
+  def cpuToGpu(transpose: Boolean): Unit
 }

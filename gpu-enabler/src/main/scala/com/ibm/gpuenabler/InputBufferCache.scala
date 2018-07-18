@@ -9,5 +9,5 @@ object InputBufferCache {
   def update(key: String, value: InputBufferWrapper[_]): Unit = {
     cache.update(key, value)
   }
-  def get(key: String) = cache.get(key)
+  def get(key: String): Option[InputBufferWrapper[_]] = cache.get(key)
 }

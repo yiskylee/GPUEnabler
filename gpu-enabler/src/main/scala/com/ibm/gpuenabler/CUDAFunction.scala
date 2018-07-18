@@ -22,7 +22,7 @@ import java.net.URL
 
 import jcuda.Pointer
 import jcuda.driver.JCudaDriver._
-import jcuda.driver.{CUdeviceptr, CUfunction, CUstream}
+import jcuda.driver.{CUdeviceptr, CUfunction, CUmodule, CUstream}
 import jcuda.runtime.{JCuda, cudaStream_t}
 import org.apache.commons.io.IOUtils
 import org.apache.spark._
@@ -525,12 +525,12 @@ class CUDAFunction( val funcNames: Seq[String],
 class CUDAFunction2(val funcNames: Seq[String],
                     val resourceURL: URL,
                     val params: Seq[Param],
-                    val dimensions: (dim3, dim3)) {
+                    val dimensions: Seq[Option[Int => (dim3, dim3)]]) {
 
   // touch GPUSparkEnv for endpoint init
   GPUSparkEnv.get
 
-  val module = GPUSparkEnv.get.cudaManager.cachedLoadModule(Left(resourceURL))
+  val module: CUmodule = GPUSparkEnv.get.cudaManager.cachedLoadModule(Left(resourceURL))
   val functions: Seq[CUfunction] = funcNames.map {funcName =>
     val function = new CUfunction
     cuModuleGetFunction(function, module, funcName)
@@ -539,16 +539,23 @@ class CUDAFunction2(val funcNames: Seq[String],
 
   def compute[U: ClassTag, T: ClassTag](input: InputBufferWrapper[T],
                                         output: OutputBufferWrapper[U],
+                                        kernelParams: Seq[Pointer],
                                         constArgs: Seq[AnyVal],
-                                        freeArgs: Seq[Any]): Unit = {
-    params.foreach {
-      case param: InputParam =>
+                                        freeArgs: Seq[Any],
+                                        sizeDepArgs: Seq[Int => Int]): Unit = {
+    val sizeDependedDims: Seq[(dim3, dim3)] = dimensions.map {
+      case None => (dim3(1), dim3(input.getSize))
+      case Some(dims) => dims(input.getSize)
+    }
 
-      }
+    functions.zip(sizeDependedDims).foreach {
+      case (function, dimension) =>
+        val grid = dimension._1
+        val block = dimension._2
+        cuLaunchKernel(function,
+          grid.x, grid.y, grid.z,
+          block.x, block.y, block.z, 0,
+          input.getCuStream, Pointer.to(kernelParams: _*), null)
+    }
   }
-
-
-
 }
-
-

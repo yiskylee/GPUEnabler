@@ -39,15 +39,10 @@ case class TempBuffer(name: String, dataType: String, size: Int => Int, mode: St
 
 abstract class Param
 case class InputParam(name: String,
-                      memType: String = "global",
                       cacheType: String = "cache",
                       transpose: Boolean = false) extends Param
-case class OutputParam(name: String,
-                       memType: String = "global",
-                       cacheType: String = "keep_alloc") extends Param
-case class FreeParam(name: String,
-                     memType: String = "global",
-                     cacheType: String = "keep_alloc",
+case class OutputParam(name: String, cacheType: String = "keep_alloc") extends Param
+case class FreeParam(name: String, cacheType: String = "keep_alloc",
                      transpose: Boolean = false) extends Param
 case class ConstParam(name: String) extends Param
 case class SizeDepParam(name: String) extends Param

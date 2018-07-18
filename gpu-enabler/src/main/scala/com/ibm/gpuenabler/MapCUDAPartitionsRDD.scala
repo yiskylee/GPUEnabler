@@ -31,64 +31,75 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
 
     kernel.params.foreach {
       case param: InputParam =>
-        if (InputBufferCache.contains(param.name)) {
-          inputBuffer = Some(InputBufferCache.get(param.name).asInstanceOf[InputBufferWrapper[T]])
+        val key: String = param.name + '_' + split.index
+        if (InputBufferCache.contains(key)) {
+          inputBuffer = Some(InputBufferCache.get(key).get
+            .asInstanceOf[InputBufferWrapper[T]])
         } else {
           val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray)
+          buffer.allocCPUPinnedMem()
           buffer.allocGPUMem()
-          buffer.copyToGPUMem(param.memType, param.transpose)
-          inputBuffer = Some(buffer.asInstanceOf[InputBufferWrapper[T]])
+          buffer.cpuToGpu(param.transpose)
+          InputBufferCache.update(key, buffer)
+          inputBuffer = Some(buffer)
         }
       case param: OutputParam =>
-        outputBuffer = OutputBufferCache.getOrElseUpdate(param.name,
-          CUDABufferUtils.createOutputBufferFor(sampleOutput, numElem)).
-          asInstanceOf[OutputBufferWrapper[U]]
+        val key: String = param.name + '_' + split.index
+        val buffer = CUDABufferUtils.createOutputBufferFor(sampleOutput, numElem)
+        if (OutputBufferCache.contains(key)) {
+          val existingBuffer = OutputBufferCache.get(key).get
+          if (existingBuffer.getSize == buffer.getSize) {
+            outputBuffer = Some(existingBuffer.asInstanceOf[OutputBufferWrapper[U]])
+          } else {
+            // The output buffer used in the last iteration has a different size as the incoming one
+            // Might be caused by different partitions
+            System.err(s"Existing output buffer's size is ${existingBuffer.getSize} " +
+              s"while the requested size is ${buffer.getSize}")
+            existingBuffer.freeGPUMem()
+            existingBuffer.freeCPUMem()
+            buffer.allocGPUMem()
+            OutputBufferCache.update(key, buffer)
+            outputBuffer = Some(buffer)
+          }
+        } else {
+          buffer.allocGPUMem()
+          OutputBufferCache.update(key, buffer)
+          outputBuffer = Some(buffer)
+        }
     }
 
     // Add size, input, output to the kernel parameters
     kernelParams += Pointer.to(Array.fill(1)(numElem))
-    inputBuffer match {
-      case Some(buffer) =>
-        buffer.getGPUPointers match {
-          case Some(pointers) =>
-            kernelParams ++ pointers
-        }
-    }
+    kernelParams ++= inputBuffer.get.getKernelParams
+    kernelParams ++= outputBuffer.get.getKernelParams
 
+//    // Add free input to the kernel paramters
+//    val freeParams = kernel.params.collect { case free: FreeParam => free }
+//    for ((freeParam, freeArg) <- freeParams.zip(freeArgs)) {
+//      kernelParams += InputBufferCache.getOrElseUpdate(freeParam.name,
+//        CUDABufferUtils.createInputBufferFor(freeArg(0), freeArg.length)).getGPUPointer
+//    }
+//
+//    // Add constant values to the kernel parameters
+//    val constParams = kernel.params.collect { case c: ConstParam => c }
+//    for ((constParam, constArg) <- constParams.zip(constArgs)) {
+//      kernelParams += Pointer.to(Array.fill(1)(constArg.asInstanceOf[Int]))
+//    }
+//
+//    // Add arguments whose values depend on the input size to the kernel parameters
+//    val sizeDepParams = kernel.params.collect { case s: SizeDepParam => s }
+//    for ((sizeDepParam, sizeDepArg) <- sizeDepParams.zip(sizeDepArgs)) {
+//      kernelParams += Pointer.to(Array.fill(1)(sizeDepArg(numElem)))
+//    }
 
+    kernel.compute[U, T](inputBuffer.get, outputBuffer.get, kernelParams,
+                         constArgs, freeArgs, sizeDepArgs)
 
-
-    kernelParams += outputBuffer.getGPUPointer
-
-    // Add free input to the kernel paramters
-    val freeParams = kernel.params.collect { case free: FreeParam => free }
-    for ((freeParam, freeArg) <- freeParams.zip(freeArgs)) {
-      kernelParams += InputBufferCache.getOrElseUpdate(freeParam.name,
-        CUDABufferUtils.createInputBufferFor(freeArg(0), freeArg.length)).getGPUPointer
-    }
-
-    // Add constant values to the kernel parameters
-    val constParams = kernel.params.collect { case c: ConstParam => c }
-    for ((constParam, constArg) <- constParams.zip(constArgs)) {
-      kernelParams += Pointer.to(Array.fill(1)(constArg.asInstanceOf[Int]))
-    }
-
-    // Add arguments whose values depend on the input size to the kernel parameters
-    val sizeDepParams = kernel.params.collect { case s: SizeDepParam => s }
-    for ((sizeDepParam, sizeDepArg) <- sizeDepParams.zip(sizeDepArgs)) {
-      kernelParams += Pointer.to(Array.fill(1)(sizeDepArg(numElem)))
-    }
-
-//    kernel.compute[U, T](inputBuffer, outputBuffer)
+    outputBuffer.get.gpuToCpu(inputBuffer.get.getStream)
 
     new Iterator[U] {
-      def next() : U = {
-        f(parentRDDArray.iterator.next)
-      }
-
-      def hasNext() : Boolean = {
-        parentRDDArray.iterator.hasNext
-      }
+      def next : U = outputBuffer.get.next
+      def hasNext : Boolean = outputBuffer.get.hasNext
     }
   }
   var inputBuffer: Option[InputBufferWrapper[T]] = None

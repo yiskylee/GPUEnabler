@@ -2,7 +2,7 @@ package com.ibm.gpuenabler
 
 import jcuda.{CudaException, Pointer}
 import jcuda.driver.CUresult
-import jcuda.runtime.JCuda
+import jcuda.runtime.{JCuda, cudaStream_t}
 
 import scala.reflect.ClassTag
 
@@ -12,25 +12,21 @@ class Tuple2OutputBufferWrapper[K: ClassTag, V: ClassTag](sample: Tuple2[K, V], 
   val buffer1: OutputBufferWrapper[K] = CUDABufferUtils.createOutputBufferFor[K](sample._1, numTuples)
   val buffer2: OutputBufferWrapper[V] = CUDABufferUtils.createOutputBufferFor[V](sample._2, numTuples)
 
-//  val outputBuffer0: OutputBufferWrapper[K] = CUDABufferUtils.createOutputBufferFor[K]()
+  override var outputArray: Option[Array[Tuple2[K, V]]] = None
 
-  private var gpuPtr: Option[Pointer] = None
-//  private val size: Int = numVectors * elemPerVector * 8
-//  override def getGPUPointer: Pointer = {
-//    gpuPtr.getOrElse(allocPinnedMemory)
-//  }
-//  override def allocPinnedMemory: Pointer = {
-//    val ptr: Pointer = new Pointer()
-//    try {
-//      val result: Int = JCuda.cudaHostAlloc(ptr, size, JCuda.cudaHostAllocPortable)
-//      if (result != CUresult.CUDA_SUCCESS) {
-//        throw new CudaException(JCuda.cudaGetErrorString(result))
-//      }
-//    }
-//    catch {
-//      case ex: Exception =>
-//        throw new OutOfMemoryError("Could not alloc pinned memory: " + ex.getMessage)
-//    }
-//    ptr
-//  }
+  override def getKernelParams: Seq[Pointer] = {
+    List(buffer1.gpuPtr.get, buffer2.gpuPtr.get)
+  }
+
+  override def allocGPUMem(): Unit = {
+    buffer1.allocGPUMem()
+    buffer2.allocGPUMem()
+  }
+
+  override def gpuToCpu(stream: cudaStream_t): Unit = {
+    buffer1.gpuToCpu(stream)
+    buffer2.gpuToCpu(stream)
+    val zipped = buffer1.outputArray.get zip buffer2.outputArray.get
+    outputArray = Some(zipped)
+  }
 }
