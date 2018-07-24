@@ -1,6 +1,6 @@
 package com.ibm.gpuenabler
 
-import jcuda.driver.CUresult
+import jcuda.driver.{CUdeviceptr, CUresult, JCudaDriver}
 import jcuda.{CudaException, Pointer}
 import jcuda.runtime.JCuda
 import org.apache.spark.mllib.linalg.DenseVector
@@ -10,7 +10,6 @@ import scala.reflect.ClassTag
 object CUDABufferUtils {
   def createInputBufferFor[T: ClassTag](inputArray: Array[T]): InputBufferWrapper[T] = {
     val sampleInput = inputArray(0)
-    val numElem = inputArray.length
     sampleInput match {
 //      case _: DenseVector =>
 //        new DenseVectorInputBufferWrapper(inputArray.asInstanceOf[Array[DenseVector]]).
@@ -18,15 +17,21 @@ object CUDABufferUtils {
 //      case _: Tuple2[_, _] =>
 //        new Tuple2InputBufferWrapper(inputArray.asInstanceOf[Array[Tuple2[_, _]]]).
 //          asInstanceOf[InputBufferWrapper[T]]
-      case _ : Int =>
-        new PrimitiveInputBufferWrapper[Int](sampleInput.asInstanceOf[Int]).
+      case _ : Array[Int] =>
+        new IntArrayInputBufferWrapper(inputArray.asInstanceOf[Array[Array[Int]]]).
           asInstanceOf[InputBufferWrapper[T]]
-      case _ : Float =>
-        new PrimitiveInputBufferWrapper[Float](sampleInput.asInstanceOf[Float]).
+      case _ : Array[Double] =>
+        new DoubleArrayInputBufferWrapper(inputArray.asInstanceOf[Array[Array[Double]]]).
           asInstanceOf[InputBufferWrapper[T]]
-      case _ : Double =>
-        new PrimitiveInputBufferWrapper[Double](sampleInput.asInstanceOf[Double]).
-          asInstanceOf[InputBufferWrapper[T]]
+//      case _ : Int =>
+//        new PrimitiveInputBufferWrapper[Int](sampleInput.asInstanceOf[Int]).
+//          asInstanceOf[InputBufferWrapper[T]]
+//      case _ : Float =>
+//        new PrimitiveInputBufferWrapper[Float](sampleInput.asInstanceOf[Float]).
+//          asInstanceOf[InputBufferWrapper[T]]
+//      case _ : Double =>
+//        new PrimitiveInputBufferWrapper[Double](sampleInput.asInstanceOf[Double]).
+//          asInstanceOf[InputBufferWrapper[T]]
     }
   }
 
@@ -36,6 +41,9 @@ object CUDABufferUtils {
       case _: DenseVector =>
         new DenseVectorOutputBufferWrapper(numElem,
           sampleOutput.asInstanceOf[DenseVector].size).asInstanceOf[OutputBufferWrapper[T]]
+      case _ : Array[Double] =>
+        new DoubleArrayOutputBufferWrapper(sampleOutput.asInstanceOf[Array[Double]], numElem).
+          asInstanceOf[OutputBufferWrapper[T]]
       case _: Tuple2[_, _] =>
         new Tuple2OutputBufferWrapper(sampleOutput.asInstanceOf[(_, _)], numElem).
           asInstanceOf[OutputBufferWrapper[T]]
@@ -54,10 +62,10 @@ object CUDABufferUtils {
   }
 
   // Allocate GPU Memory with given size and returns the GPU Pointer
-  def allocGPUMem(size: Int): Pointer = {
-    val ptr = new Pointer()
+  def allocGPUMem(size: Int): Option[CUdeviceptr] = {
+    val devicePtr = new CUdeviceptr()
     try {
-      val result: Int = JCuda.cudaMalloc(ptr, size)
+      val result: Int = JCudaDriver.cuMemAlloc(devicePtr, size)
       if (result != CUresult.CUDA_SUCCESS) {
         throw new CudaException(JCuda.cudaGetErrorString(result))
       }
@@ -66,10 +74,10 @@ object CUDABufferUtils {
         System.err.println(s"Could not alloc pinned memory: ${ex.getMessage}")
         System.exit(1)
     }
-    ptr
+    Some(devicePtr)
   }
 
-  def allocCPUPinnedMem(size: Int): Pointer = {
+  def allocCPUPinnedMem(size: Int): Option[Pointer] = {
     val ptr = new Pointer()
     try {
       val result: Int = JCuda.cudaHostAlloc(ptr, size, JCuda.cudaHostAllocPortable)
@@ -81,7 +89,6 @@ object CUDABufferUtils {
         System.err.println(s"Could not alloc pinned memory: ${ex.getMessage}")
         System.exit(1)
     }
-    ptr
+    Some(ptr)
   }
-
 }

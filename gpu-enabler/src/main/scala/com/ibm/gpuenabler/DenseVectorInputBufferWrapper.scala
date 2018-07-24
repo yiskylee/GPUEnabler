@@ -35,8 +35,4 @@ class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector])
     JCuda.cudaMemcpyAsync(gpuPtr.get, cpuPtr.get, size.get,
       cudaMemcpyKind.cudaMemcpyHostToDevice, stream)
   }
-
-  override def readFrom(iter: Iterator[DenseVector]): Unit = {
-
-  }
 }

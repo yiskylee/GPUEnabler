@@ -37,6 +37,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter, StringWriter}
 
 import breeze.linalg.{DenseVector => BrDenseVector}
+import org.apache.spark.gpuenabler.CUDAUtils
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -60,7 +61,6 @@ abstract class ExternalFunction extends Serializable {
 
   def outputColumnsOrder: Seq[DataSchema]
 }
-
 
 
 /**
@@ -92,25 +92,25 @@ abstract class ExternalFunction extends Serializable {
   *
   * }}}
   *
-  * @constructor The "compute" method is initialized so that when invoked it will
-  *              load and launch the GPU kernel with the required set of parameters
-  *              based on the input & output column order.
-  * @param funcName            Name of the Native code's function
-  * @param _inputColumnsOrder  List of input columns name mapping to corresponding
-  *                            class members of the input RDD.
-  * @param _outputColumnsOrder List of output columns name mapping to corresponding
-  *                            class members of the result RDD.
-  * @param resourceURL         Points to the resource URL where the GPU kernel is present
-  * @param constArgs           Sequence of constant argument that need to passed in to a
-  *                            GPU Kernel
-  * @param stagesCount         Provide a function which is used to determine the number
-  *                            of stages required to run this GPU kernel in spark based on the
-  *                            number of partition items to process. Default function return "1".
-  * @param dimensions          Provide a function which is used to determine the GPU compute
-  *                            dimensions for each stage. Default function will determined the
-  *                            dimensions based on the number of partition items but for a single
-  *                            stage.
-  */
+//  * @constructor The "compute" method is initialized so that when invoked it will
+//  *              load and launch the GPU kernel with the required set of parameters
+//  *              based on the input & output column order.
+//  * @param funcName            Name of the Native code's function
+//  * @param _inputColumnsOrder  List of input columns name mapping to corresponding
+//  *                            class members of the input RDD.
+//  * @param _outputColumnsOrder List of output columns name mapping to corresponding
+//  *                            class members of the result RDD.
+//  * @param resourceURL         Points to the resource URL where the GPU kernel is present
+//  * @param constArgs           Sequence of constant argument that need to passed in to a
+//  *                            GPU Kernel
+//  * @param stagesCount         Provide a function which is used to determine the number
+//  *                            of stages required to run this GPU kernel in spark based on the
+//  *                            number of partition items to process. Default function return "1".
+//  * @param dimensions          Provide a function which is used to determine the GPU compute
+//  *                            dimensions for each stage. Default function will determined the
+//  *                            dimensions based on the number of partition items but for a single
+//  *                            stage.
+//  */
 //class JavaCUDAFunction(val funcName: String,
 //                       val _inputColumnsOrder: java.util.List[String] = null,
 //                       val _outputColumnsOrder: java.util.List[String] = null,
@@ -525,17 +525,10 @@ class CUDAFunction( val funcNames: Seq[String],
 class CUDAFunction2(val funcNames: Seq[String],
                     val resourceURL: URL,
                     val params: Seq[Param],
-                    val dimensions: Seq[Option[Int => (dim3, dim3)]]) {
-
+                    val dimensions: Seq[Option[Int => (dim3, dim3)]])
+  extends Serializable with CUDAUtils._Logging {
   // touch GPUSparkEnv for endpoint init
   GPUSparkEnv.get
-
-  val module: CUmodule = GPUSparkEnv.get.cudaManager.cachedLoadModule(Left(resourceURL))
-  val functions: Seq[CUfunction] = funcNames.map {funcName =>
-    val function = new CUfunction
-    cuModuleGetFunction(function, module, funcName)
-    function
-  }
 
   def compute[U: ClassTag, T: ClassTag](input: InputBufferWrapper[T],
                                         output: OutputBufferWrapper[U],
@@ -543,19 +536,31 @@ class CUDAFunction2(val funcNames: Seq[String],
                                         constArgs: Seq[AnyVal],
                                         freeArgs: Seq[Any],
                                         sizeDepArgs: Seq[Int => Int]): Unit = {
+
+    val module: CUmodule = GPUSparkEnv.get.cudaManager.cachedLoadModule(Left(resourceURL))
+    val functions: Seq[CUfunction] = funcNames.map {funcName =>
+      val function = new CUfunction
+      cuModuleGetFunction(function, module, funcName)
+      function
+    }
+
     val sizeDependedDims: Seq[(dim3, dim3)] = dimensions.map {
-      case None => (dim3(1), dim3(input.getSize))
-      case Some(dims) => dims(input.getSize)
+      case None => (dim3(1), dim3(input.getNumElems))
+      case Some(dims) => dims(input.getNumElems)
     }
 
     functions.zip(sizeDependedDims).foreach {
       case (function, dimension) =>
         val grid = dimension._1
         val block = dimension._2
+        logInfo(s"function: $function")
+        logInfo(s"grid: (${grid.x}, ${grid.y}, ${grid.z})")
+        logInfo(s"block: (${block.x}, ${block.y}, ${block.z})")
         cuLaunchKernel(function,
           grid.x, grid.y, grid.z,
           block.x, block.y, block.z, 0,
           input.getCuStream, Pointer.to(kernelParams: _*), null)
+//          input.getCuStream, Pointer.to(kernelParams: _*), null)
     }
   }
 }

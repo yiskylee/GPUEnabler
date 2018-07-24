@@ -3,28 +3,27 @@ package com.ibm.gpuenabler
 import java.nio.ByteOrder
 
 import jcuda.{CudaException, Pointer}
-import jcuda.driver.CUresult
+import jcuda.driver.{CUresult, CUstream, JCudaDriver}
 import jcuda.runtime.{JCuda, cudaMemcpyKind, cudaStream_t}
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 
 
 class DenseVectorOutputBufferWrapper(numVectors: Int, vecSize: Int)
   extends OutputBufferWrapper[DenseVector] {
-
-  size = Some(numVectors * vecSize * 8)
-  var rawArray: Array[Double] = new Array[Double](size.get)
+  numElems = Some(numVectors * vecSize)
+  size = Some(numElems.get * 8)
+  var rawArray: Array[Double] = new Array[Double](numElems.get)
   cpuPtr = Some(Pointer.to(rawArray))
 
-  override def gpuToCpu(stream: cudaStream_t): Unit = {
-    JCuda.cudaMemcpyAsync(cpuPtr.get, gpuPtr.get, size.get,
-      cudaMemcpyKind.cudaMemcpyDeviceToHost, stream)
+  override def gpuToCpu(stream: CUstream, transpose: Boolean): Unit = {
+    JCudaDriver.cuMemcpyDtoHAsync(cpuPtr.get, devPtr.get, size.get, stream)
+    val arrayOfArrays =
+      if (transpose) rawArray.grouped(numVectors).toArray.transpose
+      else rawArray.grouped(vecSize).toArray
+
     val output = new Array[DenseVector](numVectors)
-    var index = 0
-    val rawArrayIter = rawArray.grouped(vecSize)
-    for (a <- rawArrayIter) {
-      output(index) = new DenseVector(a)
-      index += 1
-    }
+    for (i <- arrayOfArrays.indices)
+        output(i) = new DenseVector(arrayOfArrays(i))
     outputArray = Some(output)
   }
 }

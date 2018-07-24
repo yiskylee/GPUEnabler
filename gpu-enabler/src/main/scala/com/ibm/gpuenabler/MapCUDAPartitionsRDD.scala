@@ -1,6 +1,7 @@
 package com.ibm.gpuenabler
 
 import jcuda.Pointer
+import org.apache.spark.gpuenabler.CUDAUtils
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 
@@ -16,7 +17,7 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
                                                      constArgs: Seq[AnyVal],
                                                      freeArgs: Seq[Array[_]],
                                                      sizeDepArgs: Seq[Int => Int])
-  extends RDD[U](prev) {
+  extends RDD[U](prev) with CUDAUtils._Logging {
 
   override val partitioner = firstParent[T].partitioner
 
@@ -26,12 +27,14 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
     val parentRDDArray = firstParent[T].iterator(split, context).toArray
     val sampleInput = parentRDDArray(0)
     val sampleOutput = f(sampleInput)
-    val numElem = parentRDDArray.length
-    var kernelParams = new ListBuffer[Pointer]()
+    val numElems = parentRDDArray.length
+    var transpose: Boolean = false
+
 
     kernel.params.foreach {
       case param: InputParam =>
         val key: String = param.name + '_' + split.index
+        logInfo(s"key: $key")
         if (InputBufferCache.contains(key)) {
           inputBuffer = Some(InputBufferCache.get(key).get
             .asInstanceOf[InputBufferWrapper[T]])
@@ -39,13 +42,15 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
           val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray)
           buffer.allocCPUPinnedMem()
           buffer.allocGPUMem()
-          buffer.cpuToGpu(param.transpose)
+          transpose = param.transpose
+          buffer.cpuToGpu(transpose)
           InputBufferCache.update(key, buffer)
           inputBuffer = Some(buffer)
         }
       case param: OutputParam =>
         val key: String = param.name + '_' + split.index
-        val buffer = CUDABufferUtils.createOutputBufferFor(sampleOutput, numElem)
+        logInfo(s"key: $key")
+        val buffer = CUDABufferUtils.createOutputBufferFor(sampleOutput, numElems)
         if (OutputBufferCache.contains(key)) {
           val existingBuffer = OutputBufferCache.get(key).get
           if (existingBuffer.getSize == buffer.getSize) {
@@ -69,9 +74,11 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
     }
 
     // Add size, input, output to the kernel parameters
-    kernelParams += Pointer.to(Array.fill(1)(numElem))
+    var kernelParams = Seq(Pointer.to(Array.fill(1)(numElems)))
     kernelParams ++= inputBuffer.get.getKernelParams
     kernelParams ++= outputBuffer.get.getKernelParams
+    logInfo(s"$kernelParams")
+    logInfo("kernelParams filled")
 
 //    // Add free input to the kernel paramters
 //    val freeParams = kernel.params.collect { case free: FreeParam => free }
@@ -94,8 +101,10 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
 
     kernel.compute[U, T](inputBuffer.get, outputBuffer.get, kernelParams,
                          constArgs, freeArgs, sizeDepArgs)
+    logInfo("compute")
 
-    outputBuffer.get.gpuToCpu(inputBuffer.get.getStream)
+    outputBuffer.get.gpuToCpu(inputBuffer.get.getCuStream, transpose)
+    logInfo("gpuToCpu")
 
     new Iterator[U] {
       def next : U = outputBuffer.get.next
