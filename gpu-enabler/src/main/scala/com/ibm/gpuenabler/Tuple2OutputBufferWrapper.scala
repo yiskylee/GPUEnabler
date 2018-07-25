@@ -26,5 +26,7 @@ class Tuple2OutputBufferWrapper[K: ClassTag, V: ClassTag](sample: Tuple2[K, V], 
     buffer2.gpuToCpu(stream)
     val zipped = buffer1.getOutputArray zip buffer2.getOutputArray
     outputArray = Some(zipped)
+    // Reset initial index for Iterator
+    idx = 0
   }
 }

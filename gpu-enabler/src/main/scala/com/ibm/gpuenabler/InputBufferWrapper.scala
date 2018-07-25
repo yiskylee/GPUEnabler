@@ -10,7 +10,7 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
   // devPtr must be used because only jcuda driver API allows own kernels
   protected var devPtr: Option[CUdeviceptr] = None
   protected var cpuPtr: Option[Pointer] = None
-  protected var size: Option[Int] = None
+  protected var byteSize: Option[Int] = None
   protected var numElems: Option[Int] = None
   protected val stream: cudaStream_t = {
     val stream = new cudaStream_t
@@ -28,11 +28,11 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
   def getKernelParams: Seq[Pointer] = Seq(gpuPtr.get)
 
   def allocCPUPinnedMem(): Unit = {
-    cpuPtr = CUDABufferUtils.allocCPUPinnedMem(size.get)
+    cpuPtr = CUDABufferUtils.allocCPUPinnedMem(byteSize.get)
   }
 
   def allocGPUMem(): Unit = {
-    devPtr = CUDABufferUtils.allocGPUMem(size.get)
+    devPtr = CUDABufferUtils.allocGPUMem(byteSize.get)
     gpuPtr = Some(Pointer.to(devPtr.get))
   }
 
@@ -40,7 +40,7 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
     transpose = trans
   }
 
-  def getSize: Int = size.get
+  def getSize: Int = byteSize.get
 
   def getNumElems: Int = numElems.get
 

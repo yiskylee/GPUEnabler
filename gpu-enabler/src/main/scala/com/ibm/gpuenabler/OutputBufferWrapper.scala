@@ -5,14 +5,14 @@ import jcuda.driver.{CUdeviceptr, CUresult, CUstream}
 import jcuda.runtime.{JCuda, cudaStream_t}
 import org.apache.spark.gpuenabler.CUDAUtils
 
-trait OutputBufferWrapper[T] extends CUDAUtils._Logging {
+trait OutputBufferWrapper[T] extends Iterator[T] with CUDAUtils._Logging {
 
-  var idx: Int = 0
+  protected var idx: Int = 0
   protected var gpuPtr: Option[Pointer] = None
   protected var devPtr: Option[CUdeviceptr] = None
   protected var cpuPtr: Option[Pointer] = None
   protected var outputArray: Option[Array[T]] = None
-  protected var size: Option[Int] = None
+  protected var byteSize: Option[Int] = None
   protected var numElems: Option[Int] = None
   protected var transpose: Boolean = false
 
@@ -27,7 +27,7 @@ trait OutputBufferWrapper[T] extends CUDAUtils._Logging {
   def getKernelParams: Seq[Pointer] = Seq(gpuPtr.get)
 
   def allocGPUMem(): Unit = {
-    devPtr = CUDABufferUtils.allocGPUMem(size.get)
+    devPtr = CUDABufferUtils.allocGPUMem(byteSize.get)
     gpuPtr = Some(Pointer.to(devPtr.get))
   }
 
@@ -35,7 +35,7 @@ trait OutputBufferWrapper[T] extends CUDAUtils._Logging {
     transpose = trans
   }
 
-  def getSize: Int = size.get
+  def getByteSize: Int = byteSize.get
 
   def getGpuPtr: Pointer = gpuPtr.get
 

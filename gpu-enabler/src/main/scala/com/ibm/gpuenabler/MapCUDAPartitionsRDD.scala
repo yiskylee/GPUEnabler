@@ -53,13 +53,13 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
         if (OutputBufferCache.contains(key)) {
           logInfo(s"Output buffer $key found in the cache")
           val existingBuffer = OutputBufferCache.get(key).get
-          if (existingBuffer.getSize == buffer.getSize) {
+          if (existingBuffer.getByteSize == buffer.getByteSize) {
             outputBuffer = Some(existingBuffer.asInstanceOf[OutputBufferWrapper[U]])
           } else {
             // The output buffer used in the last iteration has a different size as the incoming one
             // Might be caused by different partitions
-            System.err.println(s"Existing output buffer's size is ${existingBuffer.getSize}" +
-              s"while the requested size is ${buffer.getSize}, " +
+            System.err.println(s"Existing output buffer's size is ${existingBuffer.getByteSize}" +
+              s"while the requested size is ${buffer.getByteSize}, " +
               s"free the old buffer and create a new one")
             existingBuffer.freeGPUMem()
             existingBuffer.freeCPUMem()
@@ -104,11 +104,7 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
                          constArgs, freeArgs, sizeDepArgs)
 
     outputBuffer.get.gpuToCpu(inputBuffer.get.getCuStream)
-
-    new Iterator[U] {
-      def next : U = outputBuffer.get.next
-      def hasNext : Boolean = outputBuffer.get.hasNext
-    }
+    outputBuffer.get
   }
   var inputBuffer: Option[InputBufferWrapper[T]] = None
   var outputBuffer: Option[OutputBufferWrapper[U]] = None

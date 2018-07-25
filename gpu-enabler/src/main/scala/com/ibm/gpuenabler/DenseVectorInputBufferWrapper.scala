@@ -16,10 +16,10 @@ class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector])
   private val _numVectors = inputArray.length
   private val _vecSize = inputArray(0).size
   numElems = Some(_numVectors)
-  size = Some(_numVectors * _vecSize * 8)
+  byteSize = Some(_numVectors * _vecSize * 8)
 
   override def cpuToGpu(): Unit = {
-    val buffer = cpuPtr.get.getByteBuffer(0, size.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
+    val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
     if (transpose) {
       for (i <- 0 until _numVectors) {
         val vec_i = inputArray(i).values
@@ -33,6 +33,6 @@ class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector])
           buffer.put(i * _numVectors + j, vec_i(j))
       }
     }
-    JCudaDriver.cuMemcpyHtoDAsync(devPtr.get, cpuPtr.get, size.get, cuStream)
+    JCudaDriver.cuMemcpyHtoDAsync(devPtr.get, cpuPtr.get, byteSize.get, cuStream)
   }
 }

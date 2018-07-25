@@ -11,12 +11,12 @@ import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 class DenseVectorOutputBufferWrapper(numVectors: Int, vecSize: Int)
   extends OutputBufferWrapper[DenseVector] {
   numElems = Some(numVectors * vecSize)
-  size = Some(numElems.get * 8)
+  byteSize = Some(numElems.get * 8)
   var rawArray = new Array[Double](numElems.get)
   cpuPtr = Some(Pointer.to(rawArray))
 
   override def gpuToCpu(stream: CUstream): Unit = {
-    JCudaDriver.cuMemcpyDtoHAsync(cpuPtr.get, devPtr.get, size.get, stream)
+    JCudaDriver.cuMemcpyDtoHAsync(cpuPtr.get, devPtr.get, byteSize.get, stream)
     val arrayOfArrays =
       if (transpose) rawArray.grouped(numVectors).toArray.transpose
       else rawArray.grouped(vecSize).toArray
@@ -25,5 +25,7 @@ class DenseVectorOutputBufferWrapper(numVectors: Int, vecSize: Int)
     for (i <- arrayOfArrays.indices)
         output(i) = new DenseVector(arrayOfArrays(i))
     outputArray = Some(output)
+    // Reset initial index for Iterator
+    idx = 0
   }
 }
