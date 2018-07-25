@@ -8,7 +8,7 @@ class PrimitiveInputBufferWrapper[T: ClassTag]
   extends InputBufferWrapper[T] {
   private var _inputArray: Option[Array[T]] = None
   private var _elemSize: Option[Int] = None
-  override def cpuToGpu(transpose: Boolean): Unit = {
+  override def cpuToGpu(): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, size.get).order(ByteOrder.LITTLE_ENDIAN)
     _inputArray.get(0) match {
       case _: Int =>

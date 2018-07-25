@@ -525,7 +525,8 @@ class CUDAFunction( val funcNames: Seq[String],
 class CUDAFunction2(val funcNames: Seq[String],
                     val resourceURL: URL,
                     val params: Seq[Param],
-                    val dimensions: Seq[Option[Int => (dim3, dim3)]])
+                    val blockSize: Int = 256,
+                    val dimensions: Seq[Int => (dim3, dim3)] = Seq())
   extends Serializable with CUDAUtils._Logging {
   // touch GPUSparkEnv for endpoint init
   GPUSparkEnv.get
@@ -544,23 +545,28 @@ class CUDAFunction2(val funcNames: Seq[String],
       function
     }
 
-    val sizeDependedDims: Seq[(dim3, dim3)] = dimensions.map {
-      case None => (dim3(1), dim3(input.getNumElems))
-      case Some(dims) => dims(input.getNumElems)
-    }
+    val sizeDependedDims: Seq[(dim3, dim3)] =
+      if (dimensions.isEmpty) {
+        val gridSize = (input.getNumElems + blockSize - 1) / blockSize
+        val defaultDim = (dim3(gridSize), dim3(blockSize))
+        funcNames.map (_ => defaultDim)
+      } else if (dimensions.length != funcNames.length) {
+        System.err.println("Must provide one dimension conf for each function")
+        sys.exit(-1)
+      } else {
+        dimensions.map {
+          dims => dims(input.getNumElems)
+        }
+      }
 
     functions.zip(sizeDependedDims).foreach {
       case (function, dimension) =>
         val grid = dimension._1
         val block = dimension._2
-        logInfo(s"function: $function")
-        logInfo(s"grid: (${grid.x}, ${grid.y}, ${grid.z})")
-        logInfo(s"block: (${block.x}, ${block.y}, ${block.z})")
         cuLaunchKernel(function,
           grid.x, grid.y, grid.z,
           block.x, block.y, block.z, 0,
           input.getCuStream, Pointer.to(kernelParams: _*), null)
-//          input.getCuStream, Pointer.to(kernelParams: _*), null)
     }
   }
 }

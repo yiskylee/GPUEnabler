@@ -12,10 +12,10 @@ class DenseVectorOutputBufferWrapper(numVectors: Int, vecSize: Int)
   extends OutputBufferWrapper[DenseVector] {
   numElems = Some(numVectors * vecSize)
   size = Some(numElems.get * 8)
-  var rawArray: Array[Double] = new Array[Double](numElems.get)
+  var rawArray = new Array[Double](numElems.get)
   cpuPtr = Some(Pointer.to(rawArray))
 
-  override def gpuToCpu(stream: CUstream, transpose: Boolean): Unit = {
+  override def gpuToCpu(stream: CUstream): Unit = {
     JCudaDriver.cuMemcpyDtoHAsync(cpuPtr.get, devPtr.get, size.get, stream)
     val arrayOfArrays =
       if (transpose) rawArray.grouped(numVectors).toArray.transpose

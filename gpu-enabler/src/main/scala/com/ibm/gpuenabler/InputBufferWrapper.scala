@@ -17,6 +17,7 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
     JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
     stream
   }
+  protected var transpose: Boolean = false
 
   protected val cuStream: CUstream = new CUstream(stream)
 
@@ -28,13 +29,15 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
 
   def allocCPUPinnedMem(): Unit = {
     cpuPtr = CUDABufferUtils.allocCPUPinnedMem(size.get)
-    System.err.println(s"Input Buffer Alloc CPU Pinned Mem: ${size.get}")
   }
 
   def allocGPUMem(): Unit = {
     devPtr = CUDABufferUtils.allocGPUMem(size.get)
     gpuPtr = Some(Pointer.to(devPtr.get))
-    System.err.println(s"Input Buffer Alloc GPU Pinned Mem: ${size.get}")
+  }
+
+  def setTranspose(trans: Boolean): Unit = {
+    transpose = trans
   }
 
   def getSize: Int = size.get
@@ -44,5 +47,5 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
   def getGpuPtr: Pointer = gpuPtr.get
 
   // Copy data from CPU to GPU
-  def cpuToGpu(transpose: Boolean): Unit
+  def cpuToGpu(): Unit
 }

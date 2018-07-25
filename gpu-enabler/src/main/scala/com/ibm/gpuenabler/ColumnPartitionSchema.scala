@@ -41,7 +41,9 @@ abstract class Param
 case class InputParam(name: String,
                       cacheType: String = "cache",
                       transpose: Boolean = false) extends Param
-case class OutputParam(name: String, cacheType: String = "keep_alloc") extends Param
+case class OutputParam(name: String,
+                       cacheType: String = "keep_alloc",
+                       transpose: Boolean = false) extends Param
 case class FreeParam(name: String, cacheType: String = "keep_alloc",
                      transpose: Boolean = false) extends Param
 case class ConstParam(name: String) extends Param

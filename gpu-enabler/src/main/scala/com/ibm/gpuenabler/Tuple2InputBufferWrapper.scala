@@ -24,8 +24,8 @@ class Tuple2InputBufferWrapper[K: ClassTag, V: ClassTag] (inputArray: Array[Tupl
     buffer2.allocGPUMem()
   }
 
-  override def cpuToGpu(transpose: Boolean): Unit = {
-    buffer1.cpuToGpu(transpose)
-    buffer2.cpuToGpu(transpose)
+  override def cpuToGpu(): Unit = {
+    buffer1.cpuToGpu()
+    buffer2.cpuToGpu()
   }
 }

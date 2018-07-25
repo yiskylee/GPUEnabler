@@ -11,9 +11,9 @@ object CUDABufferUtils {
   def createInputBufferFor[T: ClassTag](inputArray: Array[T]): InputBufferWrapper[T] = {
     val sampleInput = inputArray(0)
     sampleInput match {
-//      case _: DenseVector =>
-//        new DenseVectorInputBufferWrapper(inputArray.asInstanceOf[Array[DenseVector]]).
-//          asInstanceOf[InputBufferWrapper[T]]
+      case _: DenseVector =>
+        new DenseVectorInputBufferWrapper(inputArray.asInstanceOf[Array[DenseVector]]).
+          asInstanceOf[InputBufferWrapper[T]]
 //      case _: Tuple2[_, _] =>
 //        new Tuple2InputBufferWrapper(inputArray.asInstanceOf[Array[Tuple2[_, _]]]).
 //          asInstanceOf[InputBufferWrapper[T]]

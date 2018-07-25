@@ -14,7 +14,7 @@ class IntArrayInputBufferWrapper(inputArray: Array[Array[Int]])
   size = Some(numElems.get * 4)
 
 
-  override def cpuToGpu(transpose: Boolean): Unit = {
+  override def cpuToGpu(): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, size.get).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
     if (transpose) {
       for (i <- 0 until _numArrays) {

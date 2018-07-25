@@ -2,7 +2,7 @@ package com.ibm.gpuenabler
 
 import java.nio.ByteOrder
 
-import jcuda.driver.CUresult
+import jcuda.driver.{CUresult, JCudaDriver}
 import org.apache.spark.mllib.linalg.DenseVector
 import jcuda.{CudaException, Pointer}
 import jcuda.runtime.JCuda
@@ -15,9 +15,10 @@ class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector])
 
   private val _numVectors = inputArray.length
   private val _vecSize = inputArray(0).size
+  numElems = Some(_numVectors)
   size = Some(_numVectors * _vecSize * 8)
 
-  override def cpuToGpu(transpose: Boolean): Unit = {
+  override def cpuToGpu(): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, size.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
     if (transpose) {
       for (i <- 0 until _numVectors) {
@@ -32,7 +33,6 @@ class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector])
           buffer.put(i * _numVectors + j, vec_i(j))
       }
     }
-    JCuda.cudaMemcpyAsync(gpuPtr.get, cpuPtr.get, size.get,
-      cudaMemcpyKind.cudaMemcpyHostToDevice, stream)
+    JCudaDriver.cuMemcpyHtoDAsync(devPtr.get, cpuPtr.get, size.get, cuStream)
   }
 }

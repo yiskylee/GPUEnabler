@@ -14,6 +14,7 @@ trait OutputBufferWrapper[T] extends CUDAUtils._Logging {
   protected var outputArray: Option[Array[T]] = None
   protected var size: Option[Int] = None
   protected var numElems: Option[Int] = None
+  protected var transpose: Boolean = false
 
   def next: T = {
     val nextVal = outputArray.get(idx)
@@ -28,7 +29,10 @@ trait OutputBufferWrapper[T] extends CUDAUtils._Logging {
   def allocGPUMem(): Unit = {
     devPtr = CUDABufferUtils.allocGPUMem(size.get)
     gpuPtr = Some(Pointer.to(devPtr.get))
-    System.err.println(s"Output Buffer Alloc GPU Pinned Mem: ${size.get}")
+  }
+
+  def setTranspose(trans: Boolean): Unit = {
+    transpose = trans
   }
 
   def getSize: Int = size.get
@@ -38,7 +42,7 @@ trait OutputBufferWrapper[T] extends CUDAUtils._Logging {
   def getOutputArray: Array[T] = outputArray.get
 
   // Copy data from GPU to CPU
-  def gpuToCpu(stream: CUstream, transpose: Boolean): Unit
+  def gpuToCpu(stream: CUstream): Unit
 
   def freeGPUMem(): Unit = {
     JCuda.cudaFree(gpuPtr.get)
@@ -47,5 +51,4 @@ trait OutputBufferWrapper[T] extends CUDAUtils._Logging {
   def freeCPUMem(): Unit = {
     JCuda.cudaFreeHost(cpuPtr.get)
   }
-
 }

@@ -9,12 +9,11 @@ class DoubleArrayInputBufferWrapper(inputArray: Array[Array[Double]])
   extends InputBufferWrapper[Array[Double]] {
 
   private val _numArrays = inputArray.length
-  private val _inputSample = inputArray(0).asInstanceOf[Array[_]]
-  private val _arraySize = _inputSample.length
-  numElems = Some(_numArrays * _arraySize)
-  size = Some(numElems.get * 8)
+  private val _arraySize = inputArray(0).length
+  numElems = Some(_numArrays)
+  size = Some(_numArrays * _arraySize * 8)
 
-  override def cpuToGpu(transpose: Boolean): Unit = {
+  override def cpuToGpu(): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, size.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
     if (transpose) {
       for (i <- 0 until _numArrays) {
