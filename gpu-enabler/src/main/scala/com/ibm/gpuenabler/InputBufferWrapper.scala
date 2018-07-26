@@ -2,7 +2,7 @@ package com.ibm.gpuenabler
 
 import jcuda.driver.{CUdeviceptr, CUresult, CUstream}
 import jcuda.{CudaException, Pointer}
-import jcuda.runtime.{JCuda, cudaMemcpyKind, cudaStream_t}
+import jcuda.runtime.{JCuda, cudaStream_t}
 import org.apache.spark.gpuenabler.CUDAUtils
 
 trait InputBufferWrapper[T] extends CUDAUtils._Logging {
@@ -18,7 +18,9 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
     JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
     stream
   }
-  protected var transpose: Boolean = false
+  var transpose: Boolean = false
+
+  var cache: Boolean = false
 
   protected val cuStream: CUstream = new CUstream(stream)
 
@@ -32,13 +34,17 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
     cpuPtr = CUDABufferUtils.allocCPUPinnedMem(byteSize.get)
   }
 
+  def freeCPUPinnedMem(): Unit = {
+    JCuda.cudaFreeHost(cpuPtr.get)
+  }
+
   def allocGPUMem(): Unit = {
     devPtr = CUDABufferUtils.allocGPUMem(byteSize.get)
     gpuPtr = Some(Pointer.to(devPtr.get))
   }
 
-  def setTranspose(trans: Boolean): Unit = {
-    transpose = trans
+  def freeGPUMem(): Unit = {
+    JCuda.cudaFree(gpuPtr.get)
   }
 
   def getSize: Int = byteSize.get

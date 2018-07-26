@@ -56,10 +56,17 @@ trait OutputBufferWrapper[T] extends Iterator[T] with CUDAUtils._Logging {
     gpuPtr = Some(Pointer.to(devPtr.get))
   }
 
-
+  def freeGPUMem(): Unit = {
+    JCuda.cudaFree(gpuPtr.get)
+  }
 
   def setTranspose(trans: Boolean): Unit = {
     transpose = trans
+  }
+
+  def freeCPUMem(): Unit = {
+    JCuda.cudaFree(cpuPtr.get)
+    //    JCudaDriver.cuMemFreeHost(cpuPtr.get)
   }
 
   def getByteSize: Int = byteSize.get
@@ -75,11 +82,5 @@ trait OutputBufferWrapper[T] extends Iterator[T] with CUDAUtils._Logging {
 
 
 
-  def freeGPUMem(): Unit = {
-    JCudaDriver.cuMemFree(devPtr.get)
-  }
 
-  def freeCPUMem(): Unit = {
-    JCudaDriver.cuMemFreeHost(cpuPtr.get)
-  }
 }

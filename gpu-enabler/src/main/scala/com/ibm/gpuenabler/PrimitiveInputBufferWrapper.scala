@@ -4,7 +4,7 @@ import java.nio.ByteOrder
 import jcuda.runtime.{JCuda, cudaMemcpyKind}
 import scala.reflect.ClassTag
 
-class PrimitiveInputBufferWrapper[T: ClassTag]
+class PrimitiveInputBufferWrapper[T: ClassTag](param: InputParam)
   extends InputBufferWrapper[T] {
   private var _inputArray: Option[Array[T]] = None
   private var _elemSize: Option[Int] = None

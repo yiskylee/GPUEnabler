@@ -43,8 +43,7 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
               .asInstanceOf[InputBufferWrapper[T]])
           } else {
             logInfo(s"Input buffer $key not found in the cache, create a new one: ")
-            val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray)
-            buffer.setTranspose(param.transpose)
+            val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray, param)
             buffer.allocCPUPinnedMem()
             buffer.allocGPUMem()
             buffer.cpuToGpu()
@@ -53,9 +52,8 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
           }
         } else {
           logInfo(s"Input buffer is not requested to be cached, create a new one: ")
-          val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray)
+          val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray, param)
           logInfo(s"Input Buffer Created")
-          buffer.setTranspose(param.transpose)
           buffer.allocCPUPinnedMem()
           logInfo(s"Pinned Mem Created")
           buffer.allocGPUMem()
@@ -142,6 +140,12 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
 //    }
     kernel.compute[U, T](inputBuffer.get, outputBuffer.get, kernelParams,
                          constArgs, freeArgs, sizeDepArgs)
+
+    if (!inputBuffer.get.cache) {
+      inputBuffer.get.freeGPUMem()
+      inputBuffer.get.freeCPUPinnedMem()
+    }
+
     outputBuffer.get
   }
   var inputBuffer: Option[InputBufferWrapper[T]] = None
