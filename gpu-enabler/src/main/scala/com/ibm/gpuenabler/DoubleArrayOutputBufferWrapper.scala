@@ -19,18 +19,18 @@ class DoubleArrayOutputBufferWrapper(sample: Array[Double], numArrays: Int)
   }
 
   override def gpuToCpu(): Unit = {
-    logInfo("output rawArray before gpuToCpu: ")
-    println(rawArray.get.mkString(", "))
+//    logInfo("output rawArray before gpuToCpu: ")
+    logInfo(rawArray.get.mkString(", "))
     JCudaDriver.cuMemcpyDtoHAsync(cpuPtr.get, devPtr.get, byteSize.get, cuStream.get)
-    logInfo("output rawArray after gpuToCpu: ")
-    println(rawArray.get.mkString(", "))
+//    logInfo("output rawArray after gpuToCpu: ")
+//    logInfo(rawArray.get.mkString(", "))
     outputArray =
       if(transpose)
         Some(rawArray.get.grouped(numArrays).toArray.transpose)
       else
         Some(rawArray.get.grouped(_arraySize).toArray)
-    logInfo("outputArray transformed from rawArray")
-    for (array <- outputArray.get)
-      println(array.mkString(", "))
+//    logInfo("outputArray transformed from rawArray")
+//    for (array <- outputArray.get)
+//      logInfo(array.mkString(", "))
   }
 }

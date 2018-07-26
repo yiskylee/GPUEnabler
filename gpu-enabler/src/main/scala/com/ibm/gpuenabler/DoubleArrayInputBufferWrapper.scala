@@ -31,9 +31,7 @@ class DoubleArrayInputBufferWrapper(inputArray: Array[Array[Double]])
     }
     logInfo("input rawBuffer: ")
     for (i <- 0 until _numArrays * _arraySize)
-      print(s"${buffer.get(i)}, ")
-    println()
-
+      logInfo(s"${buffer.get(i)}, ")
     JCudaDriver.cuMemcpyHtoDAsync(devPtr.get, cpuPtr.get, byteSize.get, cuStream)
   }
 }
