@@ -24,6 +24,10 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
   override def compute(split: Partition, context: TaskContext) : Iterator[U] = {
+    // TODO: Check if firstParent[T].iterator is of type OutputBufferWrapper, if that is the case,
+    // TODO: we don't even check the InputBufferCache, and we don't call toArray (which would cause
+    // TODO: GPU data to be copied to CPU, which eventually would be copied back to GPU again as it
+    // TODO: is an input buffer)
     val parentRDDArray = firstParent[T].iterator(split, context).toArray
     val sampleInput = parentRDDArray(0)
     val sampleOutput = f(sampleInput)
