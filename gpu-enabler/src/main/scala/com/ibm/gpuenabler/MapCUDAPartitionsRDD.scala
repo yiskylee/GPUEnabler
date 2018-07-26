@@ -37,7 +37,7 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
           inputBuffer = Some(InputBufferCache.get(key).get
             .asInstanceOf[InputBufferWrapper[T]])
         } else {
-          logInfo(s"Input buffer $key not found in the cache, create a new one")
+          logInfo(s"Input buffer $key not found in the cache, create a new one: ")
           val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray)
           buffer.setTranspose(param.transpose)
           buffer.allocCPUPinnedMem()
@@ -48,12 +48,16 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
         }
       case param: OutputParam =>
         val key: String = param.name + '_' + split.index
-        // TODO: Optimize out buffer, I could create a function that just calculates the size
         val buffer = CUDABufferUtils.createOutputBufferFor(sampleOutput, numElems)
         if (OutputBufferCache.contains(key)) {
           logInfo(s"Output buffer $key found in the cache")
           val existingBuffer = OutputBufferCache.get(key).get
           if (existingBuffer.getByteSize == buffer.getByteSize) {
+            // When the buffer is found in the cache, we need to reset the array backing it
+            // essentially invalidate the stale copy from last time when the buffer is
+            // inserted to the cache, we still keep the GPU Pointer and GPU allocation though
+            existingBuffer.reset()
+            existingBuffer.setStream(inputBuffer.get.getCuStream)
             outputBuffer = Some(existingBuffer.asInstanceOf[OutputBufferWrapper[U]])
           } else {
             // The output buffer used in the last iteration has a different size as the incoming one
@@ -63,17 +67,27 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
               s"free the old buffer and create a new one")
             existingBuffer.freeGPUMem()
             existingBuffer.freeCPUMem()
+            // TODO: At the moment, I am manually doing allocGPUMem, allocCPUMem for all new
+            // TODO: buffers, there might be a way to make them all lazily evaluated
+            // TODO: e.g., when I call compute on the input and output buffer, they realize that
+            // TODO: data is not ready, then they would populate the buffers by itself.
+            buffer.setTranspose(param.transpose)
+            buffer.setStream(inputBuffer.get.getCuStream)
             buffer.allocGPUMem()
+            buffer.allocCPUMem()
             OutputBufferCache.update(key, buffer)
             outputBuffer = Some(buffer)
           }
         } else {
           logInfo(s"Output buffer $key not found in the cache, create a new one")
           buffer.setTranspose(param.transpose)
+          buffer.setStream(inputBuffer.get.getCuStream)
           buffer.allocGPUMem()
+          buffer.allocCPUMem()
           OutputBufferCache.update(key, buffer)
           outputBuffer = Some(buffer)
         }
+//        outputBuffer.get.setStream(inputBuffer.get.getCuStream)
     }
 
     // Add size, input, output to the kernel parameters
@@ -99,11 +113,8 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
 //    for ((sizeDepParam, sizeDepArg) <- sizeDepParams.zip(sizeDepArgs)) {
 //      kernelParams += Pointer.to(Array.fill(1)(sizeDepArg(numElem)))
 //    }
-
     kernel.compute[U, T](inputBuffer.get, outputBuffer.get, kernelParams,
                          constArgs, freeArgs, sizeDepArgs)
-
-    outputBuffer.get.gpuToCpu(inputBuffer.get.getCuStream)
     outputBuffer.get
   }
   var inputBuffer: Option[InputBufferWrapper[T]] = None

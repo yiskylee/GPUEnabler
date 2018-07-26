@@ -29,6 +29,11 @@ class DoubleArrayInputBufferWrapper(inputArray: Array[Array[Double]])
         offset += _arraySize * 8
       }
     }
+    logInfo("input rawBuffer: ")
+    for (i <- 0 until _numArrays * _arraySize)
+      print(s"${buffer.get(i)}, ")
+    println()
+
     JCudaDriver.cuMemcpyHtoDAsync(devPtr.get, cpuPtr.get, byteSize.get, cuStream)
   }
 }

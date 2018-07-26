@@ -56,6 +56,7 @@ if [[ $? -eq 0 ]]; then
 #	cd -
 else
 	echo "Failed to build gpu-enabler, exiting"
+  exit 1
 fi
 	
 

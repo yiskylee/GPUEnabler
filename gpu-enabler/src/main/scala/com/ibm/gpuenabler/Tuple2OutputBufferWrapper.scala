@@ -21,12 +21,15 @@ class Tuple2OutputBufferWrapper[K: ClassTag, V: ClassTag](sample: Tuple2[K, V], 
     buffer2.allocGPUMem()
   }
 
-  override def gpuToCpu(stream: CUstream): Unit = {
-    buffer1.gpuToCpu(stream)
-    buffer2.gpuToCpu(stream)
+  override def allocCPUMem(): Unit = {
+    buffer1.allocCPUMem()
+    buffer2.allocGPUMem()
+  }
+
+  override def gpuToCpu(): Unit = {
+    buffer1.gpuToCpu()
+    buffer2.gpuToCpu()
     val zipped = buffer1.getOutputArray zip buffer2.getOutputArray
     outputArray = Some(zipped)
-    // Reset initial index for Iterator
-    idx = 0
   }
 }

@@ -12,6 +12,7 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
   protected var cpuPtr: Option[Pointer] = None
   protected var byteSize: Option[Int] = None
   protected var numElems: Option[Int] = None
+  // TODO: Find a better way to use cuStreamDestroy(stream) to delete the stream
   protected val stream: cudaStream_t = {
     val stream = new cudaStream_t
     JCuda.cudaStreamCreateWithFlags(stream, JCuda.cudaStreamNonBlocking)
@@ -48,4 +49,7 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
 
   // Copy data from CPU to GPU
   def cpuToGpu(): Unit
+
+  // TODO: When to free input buffer's CPU and GPU memory? (If InputBuffer is not cached, we
+  // TODO: should free the buffer after the kernel is done)
 }
