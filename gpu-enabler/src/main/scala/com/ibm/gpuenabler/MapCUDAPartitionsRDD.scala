@@ -35,19 +35,29 @@ class MapCUDAPartitionsRDD[U: ClassTag, T: ClassTag](val prev: RDD[T],
 
     kernel.params.foreach {
       case param: InputParam =>
-        val key: String = param.name + '_' + split.index
-        if (InputBufferCache.contains(key)) {
-          logInfo(s"Input buffer $key found in the cache")
-          inputBuffer = Some(InputBufferCache.get(key).get
-            .asInstanceOf[InputBufferWrapper[T]])
+        if (param.cache) {
+          val key: String = param.name + '_' + split.index
+          if (InputBufferCache.contains(key)) {
+            logInfo(s"Input buffer $key found in the cache")
+            inputBuffer = Some(InputBufferCache.get(key).get
+              .asInstanceOf[InputBufferWrapper[T]])
+          } else {
+            logInfo(s"Input buffer $key not found in the cache, create a new one: ")
+            val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray)
+            buffer.setTranspose(param.transpose)
+            buffer.allocCPUPinnedMem()
+            buffer.allocGPUMem()
+            buffer.cpuToGpu()
+            InputBufferCache.update(key, buffer)
+            inputBuffer = Some(buffer)
+          }
         } else {
-          logInfo(s"Input buffer $key not found in the cache, create a new one: ")
+          logInfo(s"Input buffer is not requested to be cached, create a new one: ")
           val buffer = CUDABufferUtils.createInputBufferFor(parentRDDArray)
           buffer.setTranspose(param.transpose)
           buffer.allocCPUPinnedMem()
           buffer.allocGPUMem()
           buffer.cpuToGpu()
-          InputBufferCache.update(key, buffer)
           inputBuffer = Some(buffer)
         }
       case param: OutputParam =>
