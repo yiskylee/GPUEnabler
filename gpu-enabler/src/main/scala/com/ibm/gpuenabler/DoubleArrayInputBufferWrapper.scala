@@ -13,10 +13,12 @@ class DoubleArrayInputBufferWrapper(
   private val _numArrays = inputArray.length
   private val _arraySize = inputArray(0).length
   numElems = Some(_numArrays)
-  byteSize = Some(_numArrays * _arraySize * 8)
+
+  override def byteSize: Int = _numArrays * _arraySize * 8
 
   override def cpuToGpu(): Unit = {
-    val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
+    val buffer = cpuPtr.get.getByteBuffer(0, byteSize).order(
+      ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
     if (transpose) {
       for (i <- 0 until _numArrays) {
         val array_i = inputArray(i)
@@ -34,6 +36,6 @@ class DoubleArrayInputBufferWrapper(
     logInfo("input rawBuffer: ")
     for (i <- 0 until _numArrays * _arraySize)
       logInfo(s"${buffer.get(i)}, ")
-    JCudaDriver.cuMemcpyHtoDAsync(devPtr.get, cpuPtr.get, byteSize.get, cuStream)
+    JCudaDriver.cuMemcpyHtoDAsync(devPtr.get, cpuPtr.get, byteSize, cuStream)
   }
 }

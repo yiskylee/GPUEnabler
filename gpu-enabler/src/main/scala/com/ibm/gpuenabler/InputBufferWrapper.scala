@@ -10,7 +10,6 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
   // devPtr must be used because only jcuda driver API allows own kernels
   protected var devPtr: Option[CUdeviceptr] = None
   protected var cpuPtr: Option[Pointer] = None
-  protected var byteSize: Option[Int] = None
   protected var numElems: Option[Int] = None
 
   // TODO: Find a better way to use cuStreamDestroy(stream) to delete the stream
@@ -24,7 +23,7 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
 
   def cache: Boolean
 
-
+  def byteSize: Int
 
   protected val cuStream: CUstream = new CUstream(stream)
 
@@ -35,7 +34,7 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
   def getKernelParams: Seq[Pointer] = Seq(gpuPtr.get)
 
   def allocCPUPinnedMem(): Unit = {
-    cpuPtr = CUDABufferUtils.allocCPUPinnedMem(byteSize.get)
+    cpuPtr = CUDABufferUtils.allocCPUPinnedMem(byteSize)
   }
 
   def freeCPUPinnedMem(): Unit = {
@@ -43,15 +42,13 @@ trait InputBufferWrapper[T] extends CUDAUtils._Logging {
   }
 
   def allocGPUMem(): Unit = {
-    devPtr = CUDABufferUtils.allocGPUMem(byteSize.get)
+    devPtr = CUDABufferUtils.allocGPUMem(byteSize)
     gpuPtr = Some(Pointer.to(devPtr.get))
   }
 
   def freeGPUMem(): Unit = {
     JCuda.cudaFree(devPtr.get)
   }
-
-  def getSize: Int = byteSize.get
 
   def getNumElems: Int = numElems.get
 

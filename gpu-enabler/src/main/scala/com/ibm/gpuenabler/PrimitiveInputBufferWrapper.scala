@@ -10,8 +10,11 @@ class PrimitiveInputBufferWrapper[T: ClassTag](
     extends InputBufferWrapper[T] {
   private var _inputArray: Option[Array[T]] = None
   private var _elemSize: Option[Int] = None
+
+  override def byteSize: Int = _inputArray.get.length * _elemSize.get
+
   override def cpuToGpu(): Unit = {
-    val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(
+    val buffer = cpuPtr.get.getByteBuffer(0, byteSize).order(
       ByteOrder.LITTLE_ENDIAN)
     _inputArray.get(0) match {
       case _: Int =>
@@ -24,7 +27,7 @@ class PrimitiveInputBufferWrapper[T: ClassTag](
         buffer.asDoubleBuffer().put(_inputArray.asInstanceOf[Array[Double]])
         _elemSize = Some(8)
     }
-    JCuda.cudaMemcpyAsync(gpuPtr.get, cpuPtr.get, byteSize.get,
+    JCuda.cudaMemcpyAsync(gpuPtr.get, cpuPtr.get, byteSize,
       cudaMemcpyKind.cudaMemcpyHostToDevice, stream)
   }
 }

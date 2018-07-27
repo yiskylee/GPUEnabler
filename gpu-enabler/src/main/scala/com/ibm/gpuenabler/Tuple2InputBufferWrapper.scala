@@ -10,6 +10,10 @@ class Tuple2InputBufferWrapper[K: ClassTag, V: ClassTag](
   val transpose: Boolean)
     extends InputBufferWrapper[Tuple2[K, V]] {
 
+  // Not really need the byteSize in Tuple2Buffer
+  // Technically this is not a real InputBufferWrapper
+  override def byteSize: Int = 0
+
   val buffer1: InputBufferWrapper[K] =
     CUDABufferUtils.createInputBufferFor[K](
       inputArray.map(_._1), cache, transpose)
