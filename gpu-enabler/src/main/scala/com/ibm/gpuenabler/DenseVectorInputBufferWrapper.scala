@@ -10,16 +10,16 @@ import jcuda.runtime.cudaMemcpyKind
 
 // numVecs denotes how many dense vectors are enclosed in this buffer
 // vecSize denotes the length of each dense vector
-class DenseVectorInputBufferWrapper(inputArray: Array[DenseVector], param: InputParam)
-  extends InputBufferWrapper[DenseVector] {
+class DenseVectorInputBufferWrapper(
+  inputArray: Array[DenseVector],
+  val cache: Boolean,
+  val transpose: Boolean)
+    extends InputBufferWrapper[DenseVector] {
 
   private val _numVectors = inputArray.length
   private val _vecSize = inputArray(0).size
   numElems = Some(_numVectors)
   byteSize = Some(_numVectors * _vecSize * 8)
-  cache = param.cache
-  transpose = param.transpose
-
 
   override def cpuToGpu(): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()

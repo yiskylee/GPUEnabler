@@ -5,8 +5,12 @@ import jcuda.driver.JCudaDriver.cuCtxSynchronize
 import jcuda.runtime.{JCuda, cudaMemcpyKind, cudaStream_t}
 import org.apache.spark.gpuenabler.CUDAUtils
 
-class DoubleArrayOutputBufferWrapper(sample: Array[Double], numArrays: Int)
-  extends OutputBufferWrapper[Array[Double]] with CUDAUtils._Logging {
+class DoubleArrayOutputBufferWrapper(
+  sample: Array[Double],
+  numArrays: Int,
+  val cache: Boolean,
+  val transpose: Boolean)
+    extends OutputBufferWrapper[Array[Double]] with CUDAUtils._Logging {
   private val _arraySize = sample.length
   numElems = Some(numArrays)
   byteSize = Some(numArrays * _arraySize * 8)
@@ -21,7 +25,8 @@ class DoubleArrayOutputBufferWrapper(sample: Array[Double], numArrays: Int)
   override def gpuToCpu(): Unit = {
 //    logInfo("output rawArray before gpuToCpu: ")
     logInfo(rawArray.get.mkString(", "))
-    JCudaDriver.cuMemcpyDtoHAsync(cpuPtr.get, devPtr.get, byteSize.get, cuStream.get)
+    JCudaDriver.cuMemcpyDtoHAsync(
+      cpuPtr.get, devPtr.get, byteSize.get, cuStream.get)
 //    logInfo("output rawArray after gpuToCpu: ")
 //    logInfo(rawArray.get.mkString(", "))
     outputArray =

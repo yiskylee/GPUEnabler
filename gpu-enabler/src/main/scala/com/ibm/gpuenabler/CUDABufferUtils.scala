@@ -8,22 +8,30 @@ import org.apache.spark.mllib.linalg.DenseVector
 import scala.reflect.ClassTag
 
 object CUDABufferUtils {
-  def createInputBufferFor[T: ClassTag](inputArray: Array[T], param: InputParam):
-  InputBufferWrapper[T] = {
+  def createInputBufferFor[T: ClassTag](
+    inputArray: Array[T],
+    cache: Boolean,
+    transpose: Boolean): InputBufferWrapper[T] = {
     val sampleInput = inputArray(0)
     sampleInput match {
       case _: DenseVector =>
-        new DenseVectorInputBufferWrapper(inputArray.asInstanceOf[Array[DenseVector]], param).
-          asInstanceOf[InputBufferWrapper[T]]
+        new DenseVectorInputBufferWrapper(
+          inputArray.asInstanceOf[Array[DenseVector]],
+          cache,
+          transpose).asInstanceOf[InputBufferWrapper[T]]
 //      case _: Tuple2[_, _] =>
 //        new Tuple2InputBufferWrapper(inputArray.asInstanceOf[Array[Tuple2[_, _]]]).
 //          asInstanceOf[InputBufferWrapper[T]]
       case _ : Array[Int] =>
-        new IntArrayInputBufferWrapper(inputArray.asInstanceOf[Array[Array[Int]]], param).
-          asInstanceOf[InputBufferWrapper[T]]
+        new IntArrayInputBufferWrapper(
+          inputArray.asInstanceOf[Array[Array[Int]]],
+          cache,
+          transpose).asInstanceOf[InputBufferWrapper[T]]
       case _ : Array[Double] =>
-        new DoubleArrayInputBufferWrapper(inputArray.asInstanceOf[Array[Array[Double]]], param).
-          asInstanceOf[InputBufferWrapper[T]]
+        new DoubleArrayInputBufferWrapper(
+          inputArray.asInstanceOf[Array[Array[Double]]],
+          cache,
+          transpose).asInstanceOf[InputBufferWrapper[T]]
 //      case _ : Int =>
 //        new PrimitiveInputBufferWrapper[Int](sampleInput.asInstanceOf[Int]).
 //          asInstanceOf[InputBufferWrapper[T]]
@@ -36,27 +44,51 @@ object CUDABufferUtils {
     }
   }
 
-  def createOutputBufferFor[T: ClassTag](sampleOutput: T, numElem: Int)
-  : OutputBufferWrapper[T] = {
+  def createOutputBufferFor[T: ClassTag](
+    sampleOutput: T,
+    numElem: Int,
+    cache: Boolean,
+    transpose: Boolean): OutputBufferWrapper[T] = {
     sampleOutput match {
       case _: DenseVector =>
-        new DenseVectorOutputBufferWrapper(numElem,
-          sampleOutput.asInstanceOf[DenseVector].size).asInstanceOf[OutputBufferWrapper[T]]
+        new DenseVectorOutputBufferWrapper(
+          numElem,
+          sampleOutput.asInstanceOf[DenseVector].size,
+          cache,
+          transpose).asInstanceOf[OutputBufferWrapper[T]]
       case _ : Array[Double] =>
-        new DoubleArrayOutputBufferWrapper(sampleOutput.asInstanceOf[Array[Double]], numElem).
-          asInstanceOf[OutputBufferWrapper[T]]
+        new DoubleArrayOutputBufferWrapper(
+          sampleOutput.asInstanceOf[Array[Double]],
+          numElem,
+          cache,
+          transpose).asInstanceOf[OutputBufferWrapper[T]]
       case _: Tuple2[_, _] =>
-        new Tuple2OutputBufferWrapper(sampleOutput.asInstanceOf[(_, _)], numElem).
-          asInstanceOf[OutputBufferWrapper[T]]
+        new Tuple2OutputBufferWrapper(
+          sampleOutput.asInstanceOf[(_, _)],
+          numElem,
+          cache,
+          transpose).asInstanceOf[OutputBufferWrapper[T]]
       case _: Int =>
-        new PrimitiveOutputBufferWrapper[Int](sampleOutput.asInstanceOf[Int], numElem, 4).
-          asInstanceOf[OutputBufferWrapper[T]]
+        new PrimitiveOutputBufferWrapper[Int](
+          sampleOutput.asInstanceOf[Int],
+          numElem,
+          4,
+          cache,
+          transpose).asInstanceOf[OutputBufferWrapper[T]]
       case _: Float =>
-        new PrimitiveOutputBufferWrapper[Float](sampleOutput.asInstanceOf[Float], numElem, 4).
-          asInstanceOf[OutputBufferWrapper[T]]
+        new PrimitiveOutputBufferWrapper[Float](
+          sampleOutput.asInstanceOf[Float],
+          numElem,
+          4,
+          cache,
+          transpose).asInstanceOf[OutputBufferWrapper[T]]
       case _: Double =>
-        new PrimitiveOutputBufferWrapper[Double](sampleOutput.asInstanceOf[Double], numElem, 8).
-          asInstanceOf[OutputBufferWrapper[T]]
+        new PrimitiveOutputBufferWrapper[Double](
+          sampleOutput.asInstanceOf[Double],
+          numElem,
+          8,
+          cache,
+          transpose).asInstanceOf[OutputBufferWrapper[T]]
     }
 //    val className: String = sampleOutput.getClass.getName
 //    if (className.equals("org.apache.spark.mllib.linalg.DenseVector")) {

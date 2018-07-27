@@ -5,15 +5,15 @@ import java.nio.ByteOrder
 import jcuda.driver.JCudaDriver
 import jcuda.runtime.{JCuda, cudaMemcpyKind}
 
-class DoubleArrayInputBufferWrapper(inputArray: Array[Array[Double]], param: InputParam)
-  extends InputBufferWrapper[Array[Double]] {
+class DoubleArrayInputBufferWrapper(
+  inputArray: Array[Array[Double]],
+  val cache: Boolean,
+  val transpose: Boolean) extends InputBufferWrapper[Array[Double]] {
 
   private val _numArrays = inputArray.length
   private val _arraySize = inputArray(0).length
   numElems = Some(_numArrays)
   byteSize = Some(_numArrays * _arraySize * 8)
-  cache = param.cache
-  transpose = param.transpose
 
   override def cpuToGpu(): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()

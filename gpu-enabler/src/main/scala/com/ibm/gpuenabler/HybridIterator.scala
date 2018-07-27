@@ -132,7 +132,6 @@ private[gpuenabler] class HybridIterator[T: ClassTag](inputArr: Array[T],
 
       cachedGPUPointers.retain(
         (name, kernelParameterDesc) => !name.startsWith(blockId.get.toString))
-
     }
   }
 

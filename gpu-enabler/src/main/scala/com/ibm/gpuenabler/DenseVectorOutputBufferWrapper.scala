@@ -8,12 +8,16 @@ import jcuda.runtime.{JCuda, cudaMemcpyKind, cudaStream_t}
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 
 
-class DenseVectorOutputBufferWrapper(numVectors: Int, vecSize: Int)
-  extends OutputBufferWrapper[DenseVector] {
+class DenseVectorOutputBufferWrapper(
+  numVectors: Int,
+  vecSize: Int,
+  val cache: Boolean,
+  val transpose: Boolean)
+    extends OutputBufferWrapper[DenseVector] {
+
   numElems = Some(numVectors * vecSize)
   byteSize = Some(numElems.get * 8)
   var rawArray: Option[Array[Double]] = None
-
 
   override def allocCPUMem(): Unit = {
     rawArray = Some(new Array[Double](numElems.get))
@@ -21,7 +25,8 @@ class DenseVectorOutputBufferWrapper(numVectors: Int, vecSize: Int)
   }
 
   override def gpuToCpu(): Unit = {
-    JCudaDriver.cuMemcpyDtoHAsync(cpuPtr.get, devPtr.get, byteSize.get, cuStream.get)
+    JCudaDriver.cuMemcpyDtoHAsync(
+      cpuPtr.get, devPtr.get, byteSize.get, cuStream.get)
     val arrayOfArrays =
       if (transpose) rawArray.get.grouped(numVectors).toArray.transpose
       else rawArray.get.grouped(vecSize).toArray

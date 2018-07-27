@@ -14,8 +14,11 @@ trait OutputBufferWrapper[T] extends Iterator[T] with CUDAUtils._Logging {
   protected var outputArray: Option[Array[T]] = None
   protected var byteSize: Option[Int] = None
   protected var numElems: Option[Int] = None
-  protected var transpose: Boolean = false
   protected var cuStream: Option[CUstream] = None
+
+  def transpose: Boolean
+
+  def cache: Boolean
 
   def next: T = {
     idx += 1
@@ -57,11 +60,7 @@ trait OutputBufferWrapper[T] extends Iterator[T] with CUDAUtils._Logging {
   }
 
   def freeGPUMem(): Unit = {
-    JCuda.cudaFree(gpuPtr.get)
-  }
-
-  def setTranspose(trans: Boolean): Unit = {
-    transpose = trans
+    JCuda.cudaFree(devPtr.get)
   }
 
   def freeCPUMem(): Unit = {
@@ -79,8 +78,5 @@ trait OutputBufferWrapper[T] extends Iterator[T] with CUDAUtils._Logging {
 
   // Copy data from GPU to CPU
   def gpuToCpu(): Unit
-
-
-
 
 }

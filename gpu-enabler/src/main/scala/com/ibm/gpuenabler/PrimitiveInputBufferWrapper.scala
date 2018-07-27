@@ -4,12 +4,15 @@ import java.nio.ByteOrder
 import jcuda.runtime.{JCuda, cudaMemcpyKind}
 import scala.reflect.ClassTag
 
-class PrimitiveInputBufferWrapper[T: ClassTag](param: InputParam)
-  extends InputBufferWrapper[T] {
+class PrimitiveInputBufferWrapper[T: ClassTag](
+  val cache: Boolean,
+  val transpose: Boolean)
+    extends InputBufferWrapper[T] {
   private var _inputArray: Option[Array[T]] = None
   private var _elemSize: Option[Int] = None
   override def cpuToGpu(): Unit = {
-    val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(ByteOrder.LITTLE_ENDIAN)
+    val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(
+      ByteOrder.LITTLE_ENDIAN)
     _inputArray.get(0) match {
       case _: Int =>
         buffer.asIntBuffer().put(_inputArray.asInstanceOf[Array[Int]])

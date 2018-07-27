@@ -4,17 +4,17 @@ import java.nio.{Buffer, ByteOrder}
 
 import jcuda.runtime.{JCuda, cudaMemcpyKind}
 
-class IntArrayInputBufferWrapper(inputArray: Array[Array[Int]], param: InputParam)
-  extends InputBufferWrapper[Array[Int]] {
+class IntArrayInputBufferWrapper(
+  inputArray: Array[Array[Int]],
+  val cache: Boolean,
+  val transpose: Boolean)
+    extends InputBufferWrapper[Array[Int]] {
 
   private val _numArrays = inputArray.length
   private val _inputSample = inputArray(0).asInstanceOf[Array[_]]
   private val _arraySize = _inputSample.length
   numElems = Some(_numArrays * _arraySize)
   byteSize = Some(numElems.get * 4)
-  cache = param.cache
-  transpose = param.transpose
-
 
   override def cpuToGpu(): Unit = {
     val buffer = cpuPtr.get.getByteBuffer(0, byteSize.get).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()

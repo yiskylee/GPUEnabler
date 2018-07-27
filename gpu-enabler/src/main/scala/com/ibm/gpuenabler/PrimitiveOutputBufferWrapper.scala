@@ -5,8 +5,13 @@ import jcuda.runtime.{JCuda, cudaMemcpyKind, cudaStream_t}
 
 import scala.reflect.ClassTag
 
-class PrimitiveOutputBufferWrapper[T: ClassTag](sample: T, numScalars: Int, elemSize: Int)
-  extends OutputBufferWrapper[T] {
+class PrimitiveOutputBufferWrapper[T: ClassTag](
+  sample: T,
+  numScalars: Int,
+  elemSize: Int,
+  val cache: Boolean,
+  val transpose: Boolean)
+    extends OutputBufferWrapper[T] {
 
   numElems = Some(numScalars)
   byteSize = Some(numScalars * elemSize)
